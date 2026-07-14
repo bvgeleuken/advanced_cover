@@ -1,0 +1,19 @@
+{
+  "domain": "advanced_cover",
+  "name": "Advanced Cover",
+  "codeowners": [
+    "@florianbaethge"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "websocket_api",
+    "sun"
+  ],
+  "documentation": "https://github.com/florianbaethge/advanced_cover",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/florianbaethge/advanced_cover/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,331 @@
+{
+  "title": "Advanced Cover",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Advanced Cover",
+        "description": "Eintrag anlegen, dann Advanced Cover in der Seitenleiste öffnen, um Covers und Szenarien zu konfigurieren.",
+        "data": {
+          "name": "Name",
+          "default_min_position_delta": "Standard-Mindestabweichung der Position (%)"
+        }
+      }
+    },
+    "error": {
+      "name_required": "Bitte einen Namen eingeben."
+    }
+  },
+  "entity": {
+    "switch": {
+      "master": {
+        "name": "Automatik"
+      },
+      "cover_automation": {
+        "name": "{cover_name} Automatik"
+      }
+    },
+    "sensor": {
+      "next_run": {
+        "name": "Nächste Aktion"
+      },
+      "next_action": {
+        "name": "{cover_name} nächste Aktion"
+      }
+    },
+    "binary_sensor": {
+      "safety_blocked": {
+        "name": "{cover_name} Sicherheitsregel aktiv"
+      }
+    }
+  },
+  "services": {
+    "run_scenario": {
+      "name": "Szenario ausführen",
+      "description": "Führt ein Szenario sofort aus, optional ohne Bedingungsprüfung.",
+      "fields": {
+        "scenario_id": {
+          "name": "Szenario-ID",
+          "description": "Interne UUID des Szenarios (siehe Panel oder Diagnose)."
+        },
+        "ignore_conditions": {
+          "name": "Bedingungen ignorieren",
+          "description": "Auch ausführen, wenn die Bedingungen nicht erfüllt sind."
+        },
+        "config_entry_id": {
+          "name": "Konfigurationseintrags-ID",
+          "description": "Optional. Ziel-Eintrag bei mehreren Einträgen."
+        }
+      }
+    },
+    "run_scenario_for_cover": {
+      "name": "Szenario für ein Cover ausführen",
+      "description": "Führt ein Szenario sofort für ein einzelnes zugewiesenes Cover aus.",
+      "fields": {
+        "scenario_id": {
+          "name": "Szenario-ID",
+          "description": "Interne UUID des Szenarios."
+        },
+        "cover_item_id": {
+          "name": "Cover-ID",
+          "description": "Interne UUID des Covers."
+        },
+        "ignore_conditions": {
+          "name": "Bedingungen ignorieren",
+          "description": "Auch ausführen, wenn die Bedingungen nicht erfüllt sind."
+        },
+        "config_entry_id": {
+          "name": "Konfigurationseintrags-ID",
+          "description": "Optional. Ziel-Eintrag bei mehreren Einträgen."
+        }
+      }
+    },
+    "recalculate_schedule": {
+      "name": "Tagesplan neu berechnen",
+      "description": "Berechnet den heutigen Plan neu (Triggerzeiten, Random-Offsets, Catch-up).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konfigurationseintrags-ID",
+          "description": "Optional. Ziel-Eintrag bei mehreren Einträgen."
+        }
+      }
+    },
+    "set_cover_enabled": {
+      "name": "Cover-Automatik schalten",
+      "description": "Aktiviert oder deaktiviert die Automatik für ein Cover.",
+      "fields": {
+        "cover_item_id": {
+          "name": "Cover-ID",
+          "description": "Interne UUID des Covers."
+        },
+        "enabled": {
+          "name": "Aktiviert",
+          "description": "Ob die Automatik für dieses Cover aktiv ist."
+        },
+        "config_entry_id": {
+          "name": "Konfigurationseintrags-ID",
+          "description": "Optional. Ziel-Eintrag bei mehreren Einträgen."
+        }
+      }
+    }
+  },
+  "config_panel": {
+    "sidebar_title": "Advanced Cover",
+    "main_title": "Advanced Cover",
+    "loading": "Wird geladen…",
+    "save": "Speichern",
+    "saving": "Speichert…",
+    "cancel": "Abbrechen",
+    "off": "Aus",
+    "errors_request_failed": "Anfrage fehlgeschlagen",
+    "entry_picker_title": "Advanced Cover",
+    "entry_picker_lead": "Wähle einen Eintrag, um Covers und Szenarien zu konfigurieren.",
+    "entry_picker_empty": "Noch keine Einträge. Integration unter Einstellungen → Geräte & Dienste → Integration hinzufügen anlegen und nach Advanced Cover suchen.",
+    "tab_today": "Heute",
+    "tab_covers": "Covers",
+    "tab_scenarios": "Szenarien",
+    "tab_log": "Log",
+
+    "today_master": "Automatik aktiv",
+    "today_master_off_hint": "Der Hauptschalter ist aus. Kein Szenario bewegt ein Cover, bis du ihn wieder einschaltest.",
+    "today_recalculate": "Neu berechnen",
+    "today_intro": "Der heutige Plan: jede Szenario-Auslösung mit ihren Covers und Live-Status. Klicke auf ein Szenario, um es zu bearbeiten.",
+    "today_empty_no_scenarios": "Noch keine Szenarien. Lege zuerst Covers an, dann Szenarien.",
+    "today_empty_nothing_planned": "Für heute ist nichts geplant (Wochentage und Aktiv-Schalter prüfen).",
+    "today_no_assignments": "Keine Covers zugewiesen",
+    "today_random_offset": "Random {n} min",
+    "today_retry_until": "versucht bis {time}",
+
+    "status_planned": "Geplant",
+    "status_executed": "Ausgeführt",
+    "status_skipped": "Übersprungen",
+    "status_armed": "Wartet",
+    "status_expired": "Abgelaufen",
+    "status_blocked_safety": "Blockiert",
+    "status_unavailable": "Nicht verfügbar",
+    "status_done": "Erledigt",
+    "status_idle": "Geplant",
+
+    "covers_intro": "Jedes Cover verknüpft eine HA-Cover-Entität mit optionalem Low-Modus, Fensterkontakt und Sicherheitsregel. Der Automatik-Schalter pausiert ein einzelnes Cover.",
+    "covers_add": "Cover hinzufügen",
+    "covers_empty": "Noch keine Covers. Lege dein erstes Cover an.",
+    "covers_edit": "Bearbeiten",
+    "covers_delete": "Löschen",
+    "covers_delete_confirm": "Cover „{name}“ löschen? Auch seine Szenario-Zuweisungen werden entfernt.",
+    "covers_dialog_new": "Neues Cover",
+    "covers_dialog_edit": "Cover bearbeiten: {name}",
+    "covers_toggle_automation": "Automatik ein/aus",
+    "covers_contact_state": "Zustand des Fensterkontakts",
+    "covers_missing_entities": "Fehlt: {entities}",
+    "covers_today_summary": "Was passiert heute mit diesem Cover?",
+    "covers_today_none": "Kein Szenario betrifft dieses Cover heute.",
+    "covers_test_open": "Öffnen",
+    "covers_test_close": "Schließen",
+    "covers_test_stop": "Stopp",
+    "covers_err_name_entity_required": "Name und Cover-Entität sind Pflicht.",
+    "covers_field_name": "Name",
+    "covers_field_kind": "Art",
+    "covers_field_area": "Bereich",
+    "covers_field_azimuth": "Himmelsrichtung (°)",
+    "covers_field_entity": "Cover-Entität",
+    "covers_field_low_entity": "Cover-Entität für Low-Modus",
+    "covers_field_low_script": "Script für Low-Modus",
+    "covers_field_contact": "Kontaktsensor",
+    "covers_field_ventilation": "Lüftungsposition (%)",
+    "covers_field_safety_mode": "Bei Blockierung",
+    "covers_cap_position": "Position",
+    "covers_cap_tilt": "Lamellen",
+    "covers_cap_unavailable": "Entität nicht verfügbar",
+    "covers_low_mode_title": "Low-/Diskret-Modus (optional)",
+    "covers_low_mode_desc": "Alternative Entität oder Script für Aktionen mit Modus „Low“ (z. B. eine zweite, langsamere Cover-Entität). Das Script erhält die Zielposition als Variable „position“.",
+    "covers_contact_title": "Fensterkontakt (optional)",
+    "covers_contact_desc": "Binärsensor oder Drehgriff-Sensor mit mehreren Zuständen. Schaltet die Kontakt-Bedingung und die Sicherheitsregel frei.",
+    "covers_contact_map_title": "Zuordnung der Sensorzustände",
+    "covers_contact_map_desc": "Ordne jeden rohen Sensorzustand geschlossen / gekippt / offen zu. Bei Standard-Binärsensoren vorbelegt.",
+    "covers_contact_map_add": "Zuordnung hinzufügen",
+    "covers_safety_title": "Sicherheitsregel",
+    "covers_safety_desc": "Bei offenem Fenster wird automatisches Schließen unter die Lüftungsposition verhindert. Diese Regel ist nicht abschaltbar, nur konfigurierbar.",
+    "covers_safety_block": "Fahrt blockieren",
+    "covers_safety_clamp": "Auf Lüftungsposition begrenzen",
+    "covers_safety_tilted": "Auch bei gekipptem Fenster anwenden",
+
+    "kind_shutter": "Rollladen",
+    "kind_blind": "Raffstore/Jalousie",
+    "kind_awning": "Markise",
+    "kind_curtain": "Vorhang",
+    "kind_shade": "Rollo",
+    "kind_other": "Sonstiges",
+
+    "contact_closed": "Geschlossen",
+    "contact_tilted": "Gekippt",
+    "contact_open": "Offen",
+    "contact_unknown": "Unbekannt",
+
+    "scenarios_intro": "Szenarien fahren Covers zur Triggerzeit, wenn alle Bedingungen erfüllt sind. Die Reihenfolge bestimmt die Priorität, wenn zwei Szenarien in derselben Minute kollidieren.",
+    "scenarios_add": "Szenario hinzufügen",
+    "scenarios_empty": "Noch keine Szenarien.",
+    "scenarios_edit": "Bearbeiten",
+    "scenarios_delete": "Löschen",
+    "scenarios_delete_confirm": "Szenario „{name}“ löschen?",
+    "scenarios_dialog_new": "Neues Szenario",
+    "scenarios_dialog_edit": "Szenario bearbeiten: {name}",
+    "scenarios_move_up": "Nach oben (höhere Priorität)",
+    "scenarios_move_down": "Nach unten",
+    "scenarios_covers_count": "{n} Covers",
+    "scenarios_today_at": "heute {time}",
+    "scenarios_field_name": "Name",
+    "scenarios_enabled": "Aktiviert",
+    "scenarios_err_name_required": "Bitte einen Namen eingeben.",
+    "scenarios_when": "Wann",
+    "scenarios_only_if": "Nur wenn",
+    "scenarios_only_if_desc": "Alle Bedingungen müssen zur Triggerzeit erfüllt sein. ODER gewünscht? Lege ein zweites Szenario mit gleichem Trigger an.",
+    "scenarios_then": "Dann",
+    "scenarios_covers": "Covers",
+    "scenarios_offset_min": "Versatz (min)",
+    "scenarios_random": "Zufallsfenster",
+    "scenarios_weekdays": "Wochentage",
+    "scenarios_retry": "Weiter versuchen (Re-Arm-Fenster)",
+    "scenarios_retry_hint": "Scheitern die Bedingungen zur Triggerzeit, wartet das Szenario und prüft neu, sobald sich eine der fehlgeschlagenen Entitäten ändert — bis das Fenster endet. Positions-Bedingungen lösen diese Prüfung nie aus.",
+    "scenarios_position": "Position",
+    "scenarios_position_hint": "0 % = geschlossen, 100 % = offen (Home-Assistant-Konvention). Bei Markisen: 100 % = ausgefahren.",
+    "scenarios_tilt": "Lamellen",
+    "scenarios_mode": "Modus",
+    "scenarios_advanced": "Erweitert",
+    "scenarios_min_delta": "Mindestabweichung (%)",
+    "scenarios_min_delta_hint": "Fahrt überspringen, wenn das Cover bereits so nah am Ziel steht. Leer = Standard des Eintrags.",
+    "scenarios_add_cover": "Cover hinzufügen",
+    "scenarios_remove_cover": "Cover aus Szenario entfernen",
+    "scenarios_no_covers_hint": "Lege zuerst Covers im Covers-Tab an.",
+    "scenarios_assignment_details": "Zusatzbedingungen & Abweichungen",
+    "scenarios_extra_conditions": "Zusätzliche Bedingungen für dieses Cover",
+    "scenarios_extra_conditions_desc": "Werden zusätzlich zu den Szenario-Bedingungen geprüft (UND).",
+    "scenarios_extra_conditions_badge": "{n} Zusatzbedingungen",
+    "scenarios_override": "Abweichende Aktion",
+    "scenarios_override_badge": "Abweichung",
+    "scenarios_inherit": "Erben",
+    "scenarios_run_now": "Jetzt ausführen",
+    "scenarios_run_ignore": "Bedingungen ignorieren",
+
+    "trigger_fixed_time": "Uhrzeit",
+    "trigger_sun": "Sonne",
+    "sun_sunrise": "Sonnenaufgang",
+    "sun_sunset": "Sonnenuntergang",
+    "sun_solar_noon": "Sonnenhöchststand",
+    "random_after": "nur später (+)",
+    "random_before": "nur früher (−)",
+    "random_both": "beides (±)",
+    "mode_normal": "Normal",
+    "mode_low": "Low",
+
+    "weekday_mon": "Mo",
+    "weekday_tue": "Di",
+    "weekday_wed": "Mi",
+    "weekday_thu": "Do",
+    "weekday_fri": "Fr",
+    "weekday_sat": "Sa",
+    "weekday_sun": "So",
+    "weekdays_all": "täglich",
+
+    "cond_add": "Bedingung",
+    "cond_all_must_match": "Alle Bedingungen müssen erfüllt sein.",
+    "cond_only_if": "Nur wenn",
+    "cond_is_one_of": "den Zustand hat:",
+    "cond_is_none_of": "NICHT den Zustand hat:",
+    "cond_state_placeholder": "Zustand…",
+    "cond_remove": "Bedingung entfernen",
+    "cond_remove_state": "Zustand entfernen",
+    "cond_position_prefix": "Nur wenn dieses Cover aktuell",
+    "cond_position_suffix": "% offen ist",
+    "cond_op_above": "über",
+    "cond_op_below": "unter",
+    "cond_op_between": "zwischen",
+    "cond_and": "und",
+    "cond_contact_prefix": "Nur wenn der Fensterkontakt",
+    "cond_numeric_above": "über",
+    "cond_numeric_below": "und unter",
+    "cond_type_entity_state": "Eine Entität hat einen Zustand",
+    "cond_type_entity_state_not": "Eine Entität hat einen Zustand NICHT",
+    "cond_type_cover_position": "Aktuelle Cover-Position",
+    "cond_type_contact": "Fensterkontakt",
+    "cond_type_numeric_state": "Zahlenwert über/unter",
+
+    "log_intro": "Letzte Aktionen: jede Ausführung, jedes Überspringen, Warten und Blockieren mit Begründung.",
+    "log_filter_cover": "Nach Cover filtern",
+    "log_filter_all": "Alle Covers",
+    "log_col_time": "Zeit",
+    "log_col_cover": "Cover",
+    "log_col_scenario": "Szenario",
+    "log_col_result": "Ergebnis",
+    "log_col_reason": "Grund",
+    "log_empty": "Heute noch keine Aktionen protokolliert.",
+    "log_show_raw": "Rohzustand anzeigen (Debug)",
+
+    "today_title": "Heute",
+    "today_plan_title": "Tagesplan",
+    "covers_title": "Covers",
+    "scenarios_title": "Szenarien",
+    "log_title": "Aktionsprotokoll",
+
+    "help_today_statuses_title": "Was bedeuten die Status?",
+    "help_today_statuses_body": "Geplant: Die Triggerzeit liegt noch vor uns. Ausgeführt: Das Cover wurde gefahren. Übersprungen: Bedingungen nicht erfüllt oder Fahrt unnötig (siehe Grund). Wartet: Bedingungen waren zur Triggerzeit nicht erfüllt — das Szenario beobachtet die fehlgeschlagenen Entitäten, bis das Re-Arm-Fenster endet. Abgelaufen: Das Fenster endete ohne Erfolg. Blockiert: Die Sicherheitsregel hat das Schließen verhindert, weil das Fenster offen ist. Nicht verfügbar: Eine benötigte Entität fehlte — sicherheitshalber wurde nichts gefahren.",
+    "help_low_mode_title": "Was passiert ohne Low-Modus-Ziel?",
+    "help_low_mode_body": "Der Low-Modus ist ein optionaler alternativer Fahrweg (z. B. ein langsameres, leiseres Motorprofil). Nutzt ein Szenario den Modus „Low“, aber dieses Cover hat weder Low-Entität noch Script, läuft die Aktion einfach über die normale Cover-Entität — sie schlägt deswegen nie fehl. Sind beide konfiguriert, hat das Script Vorrang und erhält die Zielposition als Variable „position“.",
+    "help_contact_map_title": "Wie funktioniert die Zustands-Zuordnung?",
+    "help_contact_map_body": "Intern kennt die Integration nur geschlossen / gekippt / offen. Jeder rohe Sensorzustand wird über diese Tabelle übersetzt. Nicht zugeordnete Zustände gelten als „unbekannt“: Kontakt-Bedingungen schlagen dann fehl und die Sicherheitsregel bleibt inaktiv (fail-safe — nie „im Zweifel fahren“). Bei Standard-Binärsensoren ist off → geschlossen und on → offen vorbelegt.",
+    "help_safety_title": "Wann genau greift die Sicherheitsregel?",
+    "help_safety_body": "Nur bei automatischen Schließfahrten: Meldet der Kontakt offen (oder gekippt, falls unten aktiviert) und liegt die Zielposition unter der Lüftungsposition, wird die Fahrt blockiert — oder je nach Einstellung auf die Lüftungsposition begrenzt. Öffnungsfahrten werden nie eingeschränkt, und manuelle Bedienung in Home Assistant ist nicht betroffen.",
+    "help_priority_title": "Was bewirkt die Listen-Reihenfolge?",
+    "help_priority_body": "Die Reihenfolge ist die Priorität. Zielen zwei Szenarien in derselben Minute auf dasselbe Cover, werden sie von oben nach unten ausgeführt — die zuletzt ausgeführte Aktion bestimmt die Endposition. Solche Konflikte werden zusätzlich ins Home-Assistant-Log geschrieben.",
+    "help_random_title": "Wie funktioniert das Zufallsfenster?",
+    "help_random_body": "Der Versatz wird einmal pro Tag gewürfelt (Seed: Datum + Szenario) — die geplante Zeit bleibt über Neustarts stabil und wird im Heute-Tab exakt angezeigt. „nur später“ addiert 0–X Minuten, „nur früher“ zieht 0–X Minuten ab, „beides“ variiert um ±X Minuten. Praktisch z. B. für Anwesenheitssimulation im Urlaub.",
+    "help_retry_title": "Beispiel: 13:00 Uhr, aber bewölkt",
+    "help_retry_body": "Trigger 13:00, Bedingung „Wetter ist sonnig“, Fenster 4 h: Um 13:00 ist es bewölkt, also wartet die Zuweisung (Status „Wartet“). Sobald der Wetter-Helper auf sonnig wechselt — etwa 13:37 — fährt das Cover. Bleibt es bis 17:00 bewölkt? Dann läuft der Versuch ab und nichts passiert. Jede Zuweisung führt höchstens einmal pro Tag aus, ein flatternder Sensor kann also kein Ping-Pong auslösen. Positions-Bedingungen stoßen diese Prüfung nie an — ein von Hand verstelltes Cover bleibt unangetastet.",
+    "help_mode_low_title": "Was macht der Modus „Low“?",
+    "help_mode_low_body": "„Low“ nutzt den Low-/Diskret-Fahrweg des Covers — die alternative Entität oder das Script, das am Cover konfiguriert ist (z. B. eine langsamere, leisere Fahrt). Covers ohne Low-Modus-Ziel führen die Aktion einfach normal aus; wegen des Modus schlägt nichts fehl und nichts wird übersprungen.",
+    "help_min_delta_title": "Warum kleine Fahrten überspringen?",
+    "help_min_delta_body": "Steht das Cover bereits näher als dieser Abstand am Ziel, wird die Fahrt übersprungen (Ergebnis „Übersprungen“, Grund „already at …“). Das schont die Motoren und verhindert sichtbares Zucken, z. B. beim Catch-up nach einem Neustart. Eine angeforderte Lamellen-Änderung wird trotzdem ausgeführt.",
+    "help_override_title": "Was bewirkt eine Abweichung?",
+    "help_override_body": "Leere Felder erben von der „Dann“-Aktion des Szenarios; nur ausgefüllte Felder weichen ab — für dieses eine Cover. Beispiel: Das Szenario schließt auf 0 %, die Abweichung fürs Schlafzimmer sagt 25 % — alle anderen Covers fahren weiterhin auf 0 %. Das Badge „Abweichung“ an der Zeile zeigt, dass eine aktiv ist.",
+    "help_assignments_title": "Wie funktionieren die Zuweisungen?",
+    "help_assignments_body": "Jede Zeile ist ein Cover, das dieses Szenario steuert. Eine Zeile ohne Zusatz-Einstellungen erbt alles — das ist der Normalfall. Klappe eine Zeile auf, um Bedingungen nur für dieses Cover zu ergänzen (zusätzlich zu den Szenario-Bedingungen, UND) oder die Aktion abweichend zu setzen."
+  }
+}

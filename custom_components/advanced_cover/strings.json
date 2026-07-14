@@ -1,0 +1,331 @@
+{
+  "title": "Advanced Cover",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Advanced Cover",
+        "description": "Create the entry, then open Advanced Cover in the sidebar to configure covers and scenarios.",
+        "data": {
+          "name": "Name",
+          "default_min_position_delta": "Default minimum position delta (%)"
+        }
+      }
+    },
+    "error": {
+      "name_required": "Please enter a name."
+    }
+  },
+  "entity": {
+    "switch": {
+      "master": {
+        "name": "Automation"
+      },
+      "cover_automation": {
+        "name": "{cover_name} automation"
+      }
+    },
+    "sensor": {
+      "next_run": {
+        "name": "Next action"
+      },
+      "next_action": {
+        "name": "{cover_name} next action"
+      }
+    },
+    "binary_sensor": {
+      "safety_blocked": {
+        "name": "{cover_name} safety blocked"
+      }
+    }
+  },
+  "services": {
+    "run_scenario": {
+      "name": "Run scenario",
+      "description": "Runs a scenario now, optionally ignoring its conditions.",
+      "fields": {
+        "scenario_id": {
+          "name": "Scenario ID",
+          "description": "The scenario's internal UUID (see panel or diagnostics)."
+        },
+        "ignore_conditions": {
+          "name": "Ignore conditions",
+          "description": "Execute even if the scenario's conditions are not met."
+        },
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional. Target entry when multiple entries exist."
+        }
+      }
+    },
+    "run_scenario_for_cover": {
+      "name": "Run scenario for one cover",
+      "description": "Runs a scenario now for a single assigned cover.",
+      "fields": {
+        "scenario_id": {
+          "name": "Scenario ID",
+          "description": "The scenario's internal UUID."
+        },
+        "cover_item_id": {
+          "name": "Cover item ID",
+          "description": "The cover item's internal UUID."
+        },
+        "ignore_conditions": {
+          "name": "Ignore conditions",
+          "description": "Execute even if the conditions are not met."
+        },
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional. Target entry when multiple entries exist."
+        }
+      }
+    },
+    "recalculate_schedule": {
+      "name": "Recalculate schedule",
+      "description": "Rebuilds today's plan (trigger times, random offsets, catch-up).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional. Target entry when multiple entries exist."
+        }
+      }
+    },
+    "set_cover_enabled": {
+      "name": "Set cover automation",
+      "description": "Enables or disables automation for one cover.",
+      "fields": {
+        "cover_item_id": {
+          "name": "Cover item ID",
+          "description": "The cover item's internal UUID."
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "Whether automation is active for this cover."
+        },
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional. Target entry when multiple entries exist."
+        }
+      }
+    }
+  },
+  "config_panel": {
+    "sidebar_title": "Advanced Cover",
+    "main_title": "Advanced Cover",
+    "loading": "Loading…",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "off": "Off",
+    "errors_request_failed": "Request failed",
+    "entry_picker_title": "Advanced Cover",
+    "entry_picker_lead": "Pick an entry to configure covers and scenarios.",
+    "entry_picker_empty": "No entries yet. Add the integration under Settings → Devices & services → Add integration, then search for Advanced Cover.",
+    "tab_today": "Today",
+    "tab_covers": "Covers",
+    "tab_scenarios": "Scenarios",
+    "tab_log": "Log",
+
+    "today_master": "Automation active",
+    "today_master_off_hint": "The master switch is off. No scenario will move any cover until you enable it again.",
+    "today_recalculate": "Recalculate",
+    "today_intro": "Today's plan: every scenario firing with its covers and live status. Click a scenario to edit it.",
+    "today_empty_no_scenarios": "No scenarios yet. Create covers first, then scenarios.",
+    "today_empty_nothing_planned": "Nothing planned for today (check weekdays and enabled switches).",
+    "today_no_assignments": "No covers assigned",
+    "today_random_offset": "random {n} min",
+    "today_retry_until": "retries until {time}",
+
+    "status_planned": "Planned",
+    "status_executed": "Executed",
+    "status_skipped": "Skipped",
+    "status_armed": "Waiting",
+    "status_expired": "Expired",
+    "status_blocked_safety": "Blocked",
+    "status_unavailable": "Unavailable",
+    "status_done": "Done",
+    "status_idle": "Planned",
+
+    "covers_intro": "Each cover links one HA cover entity with optional low mode, window contact and safety rule. The automation toggle pauses a single cover.",
+    "covers_add": "Add cover",
+    "covers_empty": "No covers yet. Add your first cover to get started.",
+    "covers_edit": "Edit",
+    "covers_delete": "Delete",
+    "covers_delete_confirm": "Delete cover \"{name}\"? Its scenario assignments are removed as well.",
+    "covers_dialog_new": "New cover",
+    "covers_dialog_edit": "Edit cover: {name}",
+    "covers_toggle_automation": "Automation on/off",
+    "covers_contact_state": "Window contact state",
+    "covers_missing_entities": "Missing: {entities}",
+    "covers_today_summary": "What happens with this cover today?",
+    "covers_today_none": "No scenario touches this cover today.",
+    "covers_test_open": "Open",
+    "covers_test_close": "Close",
+    "covers_test_stop": "Stop",
+    "covers_err_name_entity_required": "Name and cover entity are required.",
+    "covers_field_name": "Name",
+    "covers_field_kind": "Kind",
+    "covers_field_area": "Area",
+    "covers_field_azimuth": "Azimuth (°)",
+    "covers_field_entity": "Cover entity",
+    "covers_field_low_entity": "Low-mode cover entity",
+    "covers_field_low_script": "Low-mode script",
+    "covers_field_contact": "Contact sensor",
+    "covers_field_ventilation": "Ventilation position (%)",
+    "covers_field_safety_mode": "When blocked",
+    "covers_cap_position": "Position",
+    "covers_cap_tilt": "Tilt",
+    "covers_cap_unavailable": "Entity unavailable",
+    "covers_low_mode_title": "Low / discreet mode (optional)",
+    "covers_low_mode_desc": "Alternative entity or script used when a scenario action has mode \"low\" (e.g. a second, slower cover entity). The script receives the target position as variable \"position\".",
+    "covers_contact_title": "Window contact (optional)",
+    "covers_contact_desc": "Binary sensor or multi-state handle sensor. Enables the contact condition and the safety rule.",
+    "covers_contact_map_title": "Sensor state mapping",
+    "covers_contact_map_desc": "Map each raw sensor state to closed / tilted / open. Prefilled for standard binary sensors.",
+    "covers_contact_map_add": "Add mapping",
+    "covers_safety_title": "Safety rule",
+    "covers_safety_desc": "With an open window, automatic closing below the ventilation position is prevented. This rule cannot be disabled, only configured.",
+    "covers_safety_block": "Block the movement",
+    "covers_safety_clamp": "Clamp to ventilation position",
+    "covers_safety_tilted": "Also apply when the window is tilted",
+
+    "kind_shutter": "Shutter",
+    "kind_blind": "Venetian blind",
+    "kind_awning": "Awning",
+    "kind_curtain": "Curtain",
+    "kind_shade": "Shade",
+    "kind_other": "Other",
+
+    "contact_closed": "Closed",
+    "contact_tilted": "Tilted",
+    "contact_open": "Open",
+    "contact_unknown": "Unknown",
+
+    "scenarios_intro": "Scenarios move covers at a trigger time when all conditions are met. Order defines priority when two scenarios collide on the same minute.",
+    "scenarios_add": "Add scenario",
+    "scenarios_empty": "No scenarios yet.",
+    "scenarios_edit": "Edit",
+    "scenarios_delete": "Delete",
+    "scenarios_delete_confirm": "Delete scenario \"{name}\"?",
+    "scenarios_dialog_new": "New scenario",
+    "scenarios_dialog_edit": "Edit scenario: {name}",
+    "scenarios_move_up": "Move up (higher priority)",
+    "scenarios_move_down": "Move down",
+    "scenarios_covers_count": "{n} covers",
+    "scenarios_today_at": "today {time}",
+    "scenarios_field_name": "Name",
+    "scenarios_enabled": "Enabled",
+    "scenarios_err_name_required": "Please enter a name.",
+    "scenarios_when": "When",
+    "scenarios_only_if": "Only if",
+    "scenarios_only_if_desc": "All conditions must be met at trigger time. Need OR? Create a second scenario with the same trigger.",
+    "scenarios_then": "Then",
+    "scenarios_covers": "Covers",
+    "scenarios_offset_min": "Offset (min)",
+    "scenarios_random": "Random window",
+    "scenarios_weekdays": "Weekdays",
+    "scenarios_retry": "Keep trying (re-arm window)",
+    "scenarios_retry_hint": "If conditions fail at trigger time, the scenario waits and re-checks whenever one of the failing entities changes — until the window ends. Cover position conditions never re-trigger this check.",
+    "scenarios_position": "Position",
+    "scenarios_position_hint": "0% = closed, 100% = open (Home Assistant convention). For awnings 100% = extended.",
+    "scenarios_tilt": "Tilt",
+    "scenarios_mode": "Mode",
+    "scenarios_advanced": "Advanced",
+    "scenarios_min_delta": "Min. position delta (%)",
+    "scenarios_min_delta_hint": "Skip the movement when the cover is already within this distance of the target. Empty = entry default.",
+    "scenarios_add_cover": "Add cover",
+    "scenarios_remove_cover": "Remove cover from scenario",
+    "scenarios_no_covers_hint": "Create covers first on the Covers tab.",
+    "scenarios_assignment_details": "Extra conditions & overrides",
+    "scenarios_extra_conditions": "Extra conditions for this cover",
+    "scenarios_extra_conditions_desc": "Checked in addition to the scenario conditions (AND).",
+    "scenarios_extra_conditions_badge": "{n} extra conditions",
+    "scenarios_override": "Action override",
+    "scenarios_override_badge": "Override",
+    "scenarios_inherit": "Inherit",
+    "scenarios_run_now": "Run now",
+    "scenarios_run_ignore": "Ignore conditions",
+
+    "trigger_fixed_time": "Fixed time",
+    "trigger_sun": "Sun",
+    "sun_sunrise": "Sunrise",
+    "sun_sunset": "Sunset",
+    "sun_solar_noon": "Solar noon",
+    "random_after": "later only (+)",
+    "random_before": "earlier only (−)",
+    "random_both": "both (±)",
+    "mode_normal": "Normal",
+    "mode_low": "Low",
+
+    "weekday_mon": "Mon",
+    "weekday_tue": "Tue",
+    "weekday_wed": "Wed",
+    "weekday_thu": "Thu",
+    "weekday_fri": "Fri",
+    "weekday_sat": "Sat",
+    "weekday_sun": "Sun",
+    "weekdays_all": "daily",
+
+    "cond_add": "Add condition",
+    "cond_all_must_match": "All conditions must be met.",
+    "cond_only_if": "Only if",
+    "cond_is_one_of": "is",
+    "cond_is_none_of": "is NOT",
+    "cond_state_placeholder": "state…",
+    "cond_remove": "Remove condition",
+    "cond_remove_state": "Remove state",
+    "cond_position_prefix": "Only if this cover is currently",
+    "cond_position_suffix": "% open",
+    "cond_op_above": "above",
+    "cond_op_below": "below",
+    "cond_op_between": "between",
+    "cond_and": "and",
+    "cond_contact_prefix": "Only if the window contact is",
+    "cond_numeric_above": "is above",
+    "cond_numeric_below": "and below",
+    "cond_type_entity_state": "An entity has a state",
+    "cond_type_entity_state_not": "An entity does NOT have a state",
+    "cond_type_cover_position": "Current cover position",
+    "cond_type_contact": "Window contact",
+    "cond_type_numeric_state": "Numeric value above/below",
+
+    "log_intro": "Recent actions: every execution, skip, wait and block with its reason.",
+    "log_filter_cover": "Filter by cover",
+    "log_filter_all": "All covers",
+    "log_col_time": "Time",
+    "log_col_cover": "Cover",
+    "log_col_scenario": "Scenario",
+    "log_col_result": "Result",
+    "log_col_reason": "Reason",
+    "log_empty": "No actions logged yet today.",
+    "log_show_raw": "Show raw state (debug)",
+
+    "today_title": "Today",
+    "today_plan_title": "Today's plan",
+    "covers_title": "Covers",
+    "scenarios_title": "Scenarios",
+    "log_title": "Action log",
+
+    "help_today_statuses_title": "What do the statuses mean?",
+    "help_today_statuses_body": "Planned: the trigger time is still ahead. Executed: the cover was moved. Skipped: conditions were not met or the move was unnecessary (see reason). Waiting: conditions failed at trigger time — the scenario keeps watching the failing entities until its re-arm window ends. Expired: the window ended without success. Blocked: the safety rule prevented closing because the window is open. Unavailable: a required entity was missing — for safety, nothing was moved.",
+    "help_low_mode_title": "What if no low-mode target is configured?",
+    "help_low_mode_body": "Low mode is an optional alternative drive path (e.g. a slower, quieter motor profile). If a scenario uses mode “Low” but this cover has neither a low-mode entity nor a script, the action simply runs on the normal cover entity — it never fails because of this. If both are configured, the script takes precedence and receives the target position as the variable “position”.",
+    "help_contact_map_title": "How does the state mapping work?",
+    "help_contact_map_body": "Internally the integration only knows closed / tilted / open. Every raw sensor state is translated through this table. Unmapped states count as “unknown”: contact conditions then fail and the safety rule stays inactive (fail-safe — never move “just in case”). For standard binary sensors, off → closed and on → open is prefilled.",
+    "help_safety_title": "When exactly does the safety rule kick in?",
+    "help_safety_body": "Only for automatic closing moves: if the contact reports open (or tilted, if enabled below) and the target position is below the ventilation position, the move is blocked — or clamped to the ventilation position, depending on the setting. Opening moves are never restricted, and manual control in Home Assistant is unaffected.",
+    "help_priority_title": "What does the list order do?",
+    "help_priority_body": "The order is the priority. If two scenarios target the same cover in the same minute, they execute top to bottom — the action executed last determines the final position. Such conflicts are also written to the Home Assistant log.",
+    "help_random_title": "How does the random window work?",
+    "help_random_body": "The offset is rolled once per day (seeded with date + scenario), so the planned time stays stable across restarts and is shown exactly in the Today tab. “later only” adds 0–X minutes, “earlier only” subtracts 0–X minutes, “both” varies within ±X minutes. Useful e.g. for presence simulation while away.",
+    "help_retry_title": "Example: 13:00, but it is cloudy",
+    "help_retry_body": "Trigger 13:00, condition “weather is sunny”, window 4 h: at 13:00 it is cloudy, so the assignment waits (status “Waiting”). The moment the weather helper switches to sunny — say 13:37 — the cover moves. Still cloudy at 17:00? The run expires and nothing happens. Every assignment executes at most once per day, so a flapping sensor can never cause ping-pong. Cover-position conditions never re-trigger this check — a manually moved cover stays untouched.",
+    "help_mode_low_title": "What does mode “Low” do?",
+    "help_mode_low_body": "“Low” uses the cover's low/discreet drive path — the alternative entity or script configured on the cover (e.g. a slower, quieter run). Covers without a low-mode target simply execute the action normally; nothing fails or is skipped because of the mode.",
+    "help_min_delta_title": "Why skip small moves?",
+    "help_min_delta_body": "If the cover is already within this distance of the target, the move is skipped (result “Skipped”, reason “already at …”). That protects the motors and avoids visible twitching, e.g. during the catch-up after a restart. A requested tilt change still executes.",
+    "help_override_title": "What does an override do?",
+    "help_override_body": "Empty fields inherit from the scenario's “Then” action; only filled fields deviate — for this one cover. Example: the scenario closes to 0 %, the bedroom override says 25 % — every other cover still moves to 0 %. The badge “Override” on the row shows that a deviation is active.",
+    "help_assignments_title": "How do assignments work?",
+    "help_assignments_body": "Each row is one cover controlled by this scenario. A row without extra settings inherits everything — that is the normal case. Expand a row to add conditions that apply only to this cover (checked in addition to the scenario conditions, AND) or to override the action."
+  }
+}

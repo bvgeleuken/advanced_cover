@@ -1,0 +1,243 @@
+"""Execute resolved cover actions: service calls, safety rule, min-delta.
+
+The executor is the only place that calls cover/script services. Every
+outcome (executed, skipped, blocked_safety, unavailable) is reported back to
+the caller and logged via the coordinator.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+
+from homeassistant.components.cover import (
+    ATTR_CURRENT_POSITION,
+    ATTR_CURRENT_TILT_POSITION,
+    ATTR_POSITION,
+    ATTR_TILT_POSITION,
+    SERVICE_CLOSE_COVER,
+    SERVICE_OPEN_COVER,
+    SERVICE_SET_COVER_POSITION,
+    SERVICE_SET_COVER_TILT_POSITION,
+)
+from homeassistant.components.cover import (
+    DOMAIN as COVER_DOMAIN,
+)
+from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import HomeAssistantError
+
+from .capabilities import (
+    CoverCapabilities,
+    capabilities_from_state,
+    resolve_contact_state,
+)
+from .const import (
+    CONTACT_OPEN,
+    CONTACT_TILTED,
+    MODE_LOW,
+    RESULT_BLOCKED_SAFETY,
+    RESULT_EXECUTED,
+    RESULT_SKIPPED,
+    RESULT_UNAVAILABLE,
+    SAFETY_MODE_CLAMP,
+)
+from .models import CoverAction, CoverItem
+
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ExecutionOutcome:
+    """Result of one execution attempt."""
+
+    result: str  # executed | skipped | blocked_safety | unavailable
+    reason: str | None = None
+    position: int | None = None  # the position actually commanded
+
+
+def current_cover_position(state: State | None) -> int | None:
+    """Read the current position from a cover state, if known."""
+    if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return None
+    pos = state.attributes.get(ATTR_CURRENT_POSITION)
+    if pos is None:
+        # Position-less covers: map open/closed to 100/0.
+        if state.state == "open":
+            return 100
+        if state.state == "closed":
+            return 0
+        return None
+    try:
+        return int(pos)
+    except (TypeError, ValueError):
+        return None
+
+
+class CoverExecutor:
+    """Perform cover movements for resolved actions."""
+
+    def __init__(self, hass: HomeAssistant, default_min_position_delta: int) -> None:
+        """Initialize executor."""
+        self.hass = hass
+        self._default_delta = default_min_position_delta
+
+    def set_default_delta(self, delta: int) -> None:
+        """Update entry-wide default min position delta."""
+        self._default_delta = delta
+
+    def _apply_safety(
+        self, cover: CoverItem, target_position: int
+    ) -> tuple[int | None, str | None]:
+        """Apply the safety rule; return (adjusted position, block reason).
+
+        With an open window contact (or tilted, if configured to block),
+        *closing* moves below the ventilation position are blocked or
+        clamped. Opening moves are never restricted. The rule only applies
+        when a contact sensor is configured — for awnings and covers
+        without a contact it is inert by construction.
+        """
+        if not cover.contact_entity_id:
+            return target_position, None
+        raw = self.hass.states.get(cover.contact_entity_id)
+        contact = resolve_contact_state(
+            raw.state if raw else None, cover.contact_state_map
+        )
+        blocking_states = {CONTACT_OPEN}
+        if cover.safety.block_when_tilted:
+            blocking_states.add(CONTACT_TILTED)
+        if contact not in blocking_states:
+            return target_position, None
+        if target_position >= cover.safety.ventilation_position:
+            return target_position, None
+        current = current_cover_position(self.hass.states.get(cover.cover_entity_id))
+        if current is not None and target_position >= current:
+            # Not a closing move (fail-safe: unknown position counts as closing).
+            return target_position, None
+        if cover.safety.mode == SAFETY_MODE_CLAMP:
+            _LOGGER.debug(
+                "Safety rule clamps %s to ventilation position %s%%",
+                cover.name,
+                cover.safety.ventilation_position,
+            )
+            return cover.safety.ventilation_position, None
+        return None, (
+            f"contact is {contact}; closing below "
+            f"{cover.safety.ventilation_position}% is blocked"
+        )
+
+    async def async_execute(
+        self, cover: CoverItem, action: CoverAction
+    ) -> ExecutionOutcome:
+        """Drive the cover to the action's target, honoring all guards."""
+        use_low_mode = action.mode == MODE_LOW and (
+            cover.low_mode_entity_id or cover.low_mode_script_id
+        )
+
+        target_position, block_reason = self._apply_safety(cover, action.position)
+        if block_reason is not None or target_position is None:
+            return ExecutionOutcome(
+                RESULT_BLOCKED_SAFETY, block_reason, action.position
+            )
+
+        if use_low_mode and cover.low_mode_script_id:
+            return await self._async_run_low_mode_script(cover, target_position)
+
+        entity_id = (
+            cover.low_mode_entity_id
+            if use_low_mode and cover.low_mode_entity_id
+            else cover.cover_entity_id
+        )
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state == STATE_UNAVAILABLE:
+            return ExecutionOutcome(
+                RESULT_UNAVAILABLE, f"{entity_id} is unavailable", target_position
+            )
+
+        caps = capabilities_from_state(state)
+        current = current_cover_position(state)
+        delta = (
+            action.min_position_delta
+            if action.min_position_delta is not None
+            else self._default_delta
+        )
+
+        tilt_needed = action.tilt_position is not None and caps.supports_tilt
+        tilt_changed = tilt_needed and (
+            state.attributes.get(ATTR_CURRENT_TILT_POSITION) != action.tilt_position
+        )
+        position_changed = current is None or abs(current - target_position) >= max(
+            delta, 1
+        )
+
+        if not position_changed and not tilt_changed:
+            return ExecutionOutcome(
+                RESULT_SKIPPED,
+                f"already at {current}% (min delta {delta}%)",
+                target_position,
+            )
+
+        try:
+            if position_changed:
+                await self._async_move(entity_id, caps, target_position)
+            if tilt_changed and action.tilt_position is not None:
+                await self.hass.services.async_call(
+                    COVER_DOMAIN,
+                    SERVICE_SET_COVER_TILT_POSITION,
+                    {
+                        ATTR_ENTITY_ID: entity_id,
+                        ATTR_TILT_POSITION: action.tilt_position,
+                    },
+                    blocking=True,
+                )
+        except HomeAssistantError as err:
+            return ExecutionOutcome(
+                RESULT_UNAVAILABLE, f"service call failed: {err}", target_position
+            )
+
+        return ExecutionOutcome(RESULT_EXECUTED, None, target_position)
+
+    async def _async_move(
+        self, entity_id: str, caps: CoverCapabilities, position: int
+    ) -> None:
+        """Move the cover: set_position if supported, else open/close."""
+        if caps.supports_position:
+            await self.hass.services.async_call(
+                COVER_DOMAIN,
+                SERVICE_SET_COVER_POSITION,
+                {ATTR_ENTITY_ID: entity_id, ATTR_POSITION: position},
+                blocking=True,
+            )
+            return
+        # Open/close-only covers: intermediate values map to the closer end.
+        service = SERVICE_OPEN_COVER if position >= 50 else SERVICE_CLOSE_COVER
+        await self.hass.services.async_call(
+            COVER_DOMAIN,
+            service,
+            {ATTR_ENTITY_ID: entity_id},
+            blocking=True,
+        )
+
+    async def _async_run_low_mode_script(
+        self, cover: CoverItem, position: int
+    ) -> ExecutionOutcome:
+        """Run the configured low-mode script with the position variable."""
+        script_entity = cover.low_mode_script_id or ""
+        state = self.hass.states.get(script_entity)
+        if state is None or state.state == STATE_UNAVAILABLE:
+            return ExecutionOutcome(
+                RESULT_UNAVAILABLE, f"{script_entity} is unavailable", position
+            )
+        object_id = script_entity.split(".", 1)[-1]
+        try:
+            await self.hass.services.async_call(
+                "script",
+                object_id,
+                {"position": position},
+                blocking=True,
+            )
+        except HomeAssistantError as err:
+            return ExecutionOutcome(
+                RESULT_UNAVAILABLE, f"script call failed: {err}", position
+            )
+        return ExecutionOutcome(RESULT_EXECUTED, None, position)

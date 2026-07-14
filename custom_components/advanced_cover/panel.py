@@ -1,0 +1,79 @@
+"""Register the sidebar panel (panel_custom + static JS, Alarmo pattern)."""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.translation import async_get_translations
+
+from .const import (
+    CUSTOM_COMPONENTS,
+    DOMAIN,
+    INTEGRATION_FOLDER,
+    INTEGRATION_VERSION,
+    PANEL_FILENAME,
+    PANEL_FOLDER,
+    PANEL_FRONTEND_PATH,
+    PANEL_ICON,
+    PANEL_STATIC_REGISTERED_KEY,
+    PANEL_TITLE,
+    PANEL_URL_PATH,
+    PANEL_WEBCOMPONENT,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_register_panel(hass: HomeAssistant) -> None:
+    """Serve panel JS and register the sidebar entry."""
+    root_dir = os.path.join(hass.config.path(CUSTOM_COMPONENTS), INTEGRATION_FOLDER)
+    panel_file = os.path.join(root_dir, PANEL_FOLDER, PANEL_FILENAME)
+
+    try:
+        mtime = await hass.async_add_executor_job(os.path.getmtime, panel_file)
+        cache_bust = int(mtime)
+    except OSError:
+        _LOGGER.warning("Panel file missing at %s", panel_file)
+        cache_bust = 0
+
+    # aiohttp static routes cannot be removed once added, so this must run at
+    # most once per HA lifetime — even across panel unregister/re-register
+    # cycles (entry reload) — or aiohttp raises "method GET is already
+    # registered". Claim the flag before awaiting: config entries of this
+    # domain are set up concurrently, and a check-after-await would let both
+    # entries pass the guard.
+    if not hass.data.get(PANEL_STATIC_REGISTERED_KEY):
+        hass.data[PANEL_STATIC_REGISTERED_KEY] = True
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(PANEL_URL_PATH, panel_file, cache_headers=False)]
+        )
+
+    translations = await async_get_translations(
+        hass, hass.config.language, "config_panel", {DOMAIN}
+    )
+    sidebar_title = translations.get(
+        f"component.{DOMAIN}.config_panel.sidebar_title", PANEL_TITLE
+    )
+
+    await panel_custom.async_register_panel(
+        hass,
+        webcomponent_name=PANEL_WEBCOMPONENT,
+        frontend_url_path=PANEL_FRONTEND_PATH,
+        module_url=f"{PANEL_URL_PATH}?v={INTEGRATION_VERSION}&m={cache_bust}",
+        sidebar_title=sidebar_title,
+        sidebar_icon=PANEL_ICON,
+        require_admin=True,
+        # No embed_iframe: iframe documents do not inherit HA theme CSS.
+        config={},
+        config_panel_domain=DOMAIN,
+    )
+
+
+def async_unregister_panel(hass: HomeAssistant) -> None:
+    """Remove the sidebar panel."""
+    frontend.async_remove_panel(hass, PANEL_FRONTEND_PATH)
+    _LOGGER.debug("Removed Advanced Cover panel")

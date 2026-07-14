@@ -1,0 +1,65 @@
+run_scenario:
+  fields:
+    scenario_id:
+      required: true
+      example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+      selector:
+        text:
+    ignore_conditions:
+      required: false
+      default: false
+      selector:
+        boolean:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: advanced_cover
+
+run_scenario_for_cover:
+  fields:
+    scenario_id:
+      required: true
+      example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+      selector:
+        text:
+    cover_item_id:
+      required: true
+      example: "0b8f7a2e-1c3d-4e5f-8a9b-0c1d2e3f4a5b"
+      selector:
+        text:
+    ignore_conditions:
+      required: false
+      default: false
+      selector:
+        boolean:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: advanced_cover
+
+recalculate_schedule:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: advanced_cover
+
+set_cover_enabled:
+  fields:
+    cover_item_id:
+      required: true
+      example: "0b8f7a2e-1c3d-4e5f-8a9b-0c1d2e3f4a5b"
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: advanced_cover
