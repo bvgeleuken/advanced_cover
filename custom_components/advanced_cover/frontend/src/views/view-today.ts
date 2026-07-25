@@ -28,6 +28,18 @@ export class ViewToday extends LitElement {
 
   private _error?: string;
   private _busy = false;
+  private _expanded = new Set<string>();
+
+  private static _occKey(occ: Occurrence): string {
+    return `${occ.scenario_id}@${occ.planned_at}`;
+  }
+
+  private _toggleOcc(occ: Occurrence): void {
+    const key = ViewToday._occKey(occ);
+    if (this._expanded.has(key)) this._expanded.delete(key);
+    else this._expanded.add(key);
+    this.requestUpdate();
+  }
 
   static styles = [
     sharedStyles,
@@ -151,10 +163,29 @@ export class ViewToday extends LitElement {
         font-size: 0.8rem;
         color: var(--secondary-text-color);
       }
+      .occ-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font: inherit;
+        font-size: 0.85rem;
+        color: var(--secondary-text-color);
+        background: none;
+        border: none;
+        padding: 2px 0;
+        cursor: pointer;
+      }
+      .occ-toggle:hover {
+        color: var(--primary-text-color);
+      }
+      .occ-toggle ha-icon {
+        --mdc-icon-size: 18px;
+      }
       .occ-assignments {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
+        margin-top: 6px;
       }
       .assignment-chip {
         display: inline-flex;
@@ -239,6 +270,7 @@ export class ViewToday extends LitElement {
   }
 
   private _renderOccurrence(occ: Occurrence) {
+    const expanded = this._expanded.has(ViewToday._occKey(occ));
     return html`
       <div class="occ">
         <div class="occ-head">
@@ -261,30 +293,48 @@ export class ViewToday extends LitElement {
               >`
             : nothing}
         </div>
-        <div class="occ-assignments">
-          ${occ.assignments.map((run) => {
-            const badge = runBadge(occ, run);
-            const title = run.reason ?? "";
-            return html`
-              <span class="assignment-chip" title=${title}>
-                ${run.cover_name} → ${run.target_position}%
-                <span class="badge badge-${badge}"
-                  >${t(this.hass, `config_panel.status_${badge}`)}</span
-                >
-                ${run.status === "armed" && run.armed_until
-                  ? html`<span class="occ-meta"
-                      >⏳ ${formatTime(run.armed_until)}</span
-                    >`
-                  : nothing}
-              </span>
-            `;
-          })}
-          ${!occ.assignments.length
-            ? html`<span class="muted"
+        ${occ.assignments.length
+          ? html`
+              <button
+                type="button"
+                class="occ-toggle"
+                aria-expanded=${expanded ? "true" : "false"}
+                @click=${() => this._toggleOcc(occ)}
+              >
+                <ha-icon
+                  icon=${expanded ? "mdi:chevron-down" : "mdi:chevron-right"}
+                ></ha-icon>
+                ${t(this.hass, "config_panel.today_cover_count", {
+                  n: occ.assignments.length,
+                })}
+              </button>
+              ${expanded
+                ? html`<div class="occ-assignments">
+                    ${occ.assignments.map((run) => {
+                      const badge = runBadge(occ, run);
+                      const title = run.reason ?? "";
+                      return html`
+                        <span class="assignment-chip" title=${title}>
+                          ${run.cover_name} → ${run.target_position}%
+                          <span class="badge badge-${badge}"
+                            >${t(this.hass, `config_panel.status_${badge}`)}</span
+                          >
+                          ${run.status === "armed" && run.armed_until
+                            ? html`<span class="occ-meta"
+                                >⏳ ${formatTime(run.armed_until)}</span
+                              >`
+                            : nothing}
+                        </span>
+                      `;
+                    })}
+                  </div>`
+                : nothing}
+            `
+          : html`<div class="occ-assignments">
+              <span class="muted"
                 >${t(this.hass, "config_panel.today_no_assignments")}</span
-              >`
-            : nothing}
-        </div>
+              >
+            </div>`}
       </div>
     `;
   }

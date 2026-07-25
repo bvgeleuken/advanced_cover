@@ -8,7 +8,12 @@ import {
   saveScenario,
 } from "../data/api";
 import { renderEntityDatalist } from "../entity-input";
-import { defineCustomElementOnce, formatApiError, formatTime } from "../helpers";
+import {
+  defineCustomElementOnce,
+  formatApiError,
+  formatTime,
+  minutesOfDay,
+} from "../helpers";
 import { renderHelp } from "../help";
 import { t } from "../i18n";
 import { stripEditScenarioQueryFromUrl } from "../navigation";
@@ -78,6 +83,47 @@ export class ViewScenarios extends LitElement {
       .order-buttons button {
         padding: 2px 8px;
         line-height: 1;
+      }
+      .daypart {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+      }
+      .daypart-emoji {
+        font-size: 0.95rem;
+        line-height: 1;
+      }
+      .daypart-label {
+        min-width: 5.5em;
+      }
+      .daybar {
+        position: relative;
+        flex: 1;
+        max-width: 200px;
+        height: 6px;
+        border-radius: 3px;
+        background: linear-gradient(
+          90deg,
+          rgba(63, 81, 181, 0.28) 0%,
+          rgba(255, 193, 7, 0.32) 25%,
+          rgba(255, 235, 59, 0.42) 50%,
+          rgba(255, 152, 0, 0.32) 75%,
+          rgba(63, 81, 181, 0.28) 100%
+        );
+      }
+      .daybar-marker {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        border: 1.5px solid var(--card-background-color);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
       }
       .seg {
         display: inline-flex;
@@ -206,6 +252,72 @@ export class ViewScenarios extends LitElement {
   private _todayTime(s: Scenario): string | null {
     const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
     return occ ? formatTime(occ.planned_at) : null;
+  }
+
+  /**
+   * Approximate minute-of-day this scenario fires, for the time-of-day bar.
+   * Prefers today's computed occurrence (real sun times + offset); otherwise
+   * derives it from the trigger definition so disabled/off-day scenarios still
+   * show where in the day they belong.
+   */
+  private _scenarioMinute(s: Scenario): number | null {
+    const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
+    if (occ) {
+      const m = minutesOfDay(occ.planned_at);
+      if (m != null) return m;
+    }
+    if (s.trigger.type === "fixed_time") {
+      const [h, mm] = (s.trigger.time_local ?? "").split(":").map(Number);
+      return Number.isFinite(h) && Number.isFinite(mm) ? h * 60 + mm : null;
+    }
+    const sr = this.snapshot.sun.sunrise
+      ? minutesOfDay(this.snapshot.sun.sunrise)
+      : null;
+    const ss = this.snapshot.sun.sunset
+      ? minutesOfDay(this.snapshot.sun.sunset)
+      : null;
+    let base: number | null = null;
+    if (s.trigger.sun_event === "sunrise") base = sr;
+    else if (s.trigger.sun_event === "sunset") base = ss;
+    else if (s.trigger.sun_event === "solar_noon")
+      base = sr != null && ss != null ? Math.round((sr + ss) / 2) : 12 * 60;
+    if (base == null) return null;
+    return (((base + (s.trigger.offset_min ?? 0)) % 1440) + 1440) % 1440;
+  }
+
+  /** Map a minute-of-day to a coarse daypart with an emoji sun-position hint. */
+  private _dayPart(min: number): { key: string; emoji: string } {
+    if (min < 5 * 60) return { key: "night", emoji: "🌙" };
+    if (min < 9 * 60) return { key: "morning", emoji: "🌅" };
+    if (min < 12 * 60) return { key: "forenoon", emoji: "🌤️" };
+    if (min < 14 * 60) return { key: "noon", emoji: "☀️" };
+    if (min < 18 * 60) return { key: "afternoon", emoji: "⛅" };
+    if (min < 21 * 60) return { key: "evening", emoji: "🌇" };
+    return { key: "night", emoji: "🌙" };
+  }
+
+  private _renderDaypart(s: Scenario) {
+    const min = this._scenarioMinute(s);
+    if (min == null) return nothing;
+    const part = this._dayPart(min);
+    const label = t(this.hass, `config_panel.scenarios_daypart_${part.key}`);
+    return html`
+      <div
+        class="daypart"
+        title="${label} · ${String(Math.floor(min / 60)).padStart(2, "0")}:${String(
+          min % 60
+        ).padStart(2, "0")}"
+      >
+        <span class="daypart-emoji">${part.emoji}</span>
+        <span class="daypart-label">${label}</span>
+        <div class="daybar">
+          <div
+            class="daybar-marker"
+            style="left:${(min / 1440) * 100}%"
+          ></div>
+        </div>
+      </div>
+    `;
   }
 
   private _patch(patch: Partial<Scenario>): void {
@@ -363,6 +475,7 @@ export class ViewScenarios extends LitElement {
                 : nothing}
               → ${scenario.action.position}%
             </p>
+            ${this._renderDaypart(scenario)}
             ${scenario.warnings?.length
               ? html`<p class="warning">⚠ ${scenario.warnings.join(" · ")}</p>`
               : nothing}
