@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { COMPASS, formatAzimuth } from "../compass";
 import { deleteCover, probeCover, saveCover, testCover } from "../data/api";
 import { renderEntityDatalist } from "../entity-input";
 import { defineCustomElementOnce, formatApiError, formatTime } from "../helpers";
@@ -14,16 +15,6 @@ import type {
 } from "../types";
 
 const KINDS = ["shutter", "blind", "awning", "curtain", "shade", "other"];
-const COMPASS: Array<[string, number]> = [
-  ["N", 0],
-  ["NE", 45],
-  ["E", 90],
-  ["SE", 135],
-  ["S", 180],
-  ["SW", 225],
-  ["W", 270],
-  ["NW", 315],
-];
 const KIND_ICONS: Record<string, string> = {
   shutter: "mdi:window-shutter",
   blind: "mdi:blinds-horizontal",
@@ -121,6 +112,43 @@ export class ViewCovers extends LitElement {
   private _areaName(areaId: string | null): string {
     if (!areaId) return "";
     return this.hass.areas?.[areaId]?.name ?? areaId;
+  }
+
+  /**
+   * Group covers by area for display. Groups are sorted by area name; covers
+   * without an area go into a trailing "no area" group. Returns a flat list
+   * when no cover has an area assigned, so the plain list stays unchanged.
+   */
+  private _groupByArea(
+    covers: CoverRuntime[]
+  ): Array<{ areaId: string | null; label: string; covers: CoverRuntime[] }> {
+    const groups = new Map<string | null, CoverRuntime[]>();
+    for (const cover of covers) {
+      const key = cover.area_id ?? null;
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(cover);
+      else groups.set(key, [cover]);
+    }
+    if (groups.size === 1 && groups.has(null)) {
+      return [{ areaId: null, label: "", covers }];
+    }
+    const withArea = [...groups.entries()]
+      .filter(([areaId]) => areaId !== null)
+      .map(([areaId, items]) => ({
+        areaId,
+        label: this._areaName(areaId),
+        covers: items,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const noArea = groups.get(null);
+    if (noArea) {
+      withArea.push({
+        areaId: null,
+        label: t(this.hass, "config_panel.covers_no_area"),
+        covers: noArea,
+      });
+    }
+    return withArea;
   }
 
   // ------------------------------------------------------------ dialog logic
@@ -265,7 +293,7 @@ export class ViewCovers extends LitElement {
                 ? html`<span>📍 ${this._areaName(cover.area_id)}</span>`
                 : nothing}
               ${cover.azimuth != null
-                ? html`<span>🧭 ${cover.azimuth}°</span>`
+                ? html`<span>🧭 ${formatAzimuth(cover.azimuth)}</span>`
                 : nothing}
               ${cover.contact_state
                 ? html`<span title=${t(this.hass, "config_panel.covers_contact_state")}>
@@ -753,7 +781,18 @@ export class ViewCovers extends LitElement {
             ? html`<p class="error">${this._error}</p>`
             : nothing}
           ${snap.covers.length
-            ? snap.covers.map((c) => this._renderRow(c))
+            ? this._groupByArea(snap.covers).map((group) =>
+                group.label
+                  ? html`
+                      <div class="section-title">
+                        <ha-icon icon="mdi:floor-plan"></ha-icon>
+                        ${group.label}
+                        <span class="muted">${group.covers.length}</span>
+                      </div>
+                      ${group.covers.map((c) => this._renderRow(c))}
+                    `
+                  : group.covers.map((c) => this._renderRow(c))
+              )
             : html`<div class="empty-state">
                 <ha-icon icon="mdi:window-shutter-alert"></ha-icon>
                 <p>${t(this.hass, "config_panel.covers_empty")}</p>

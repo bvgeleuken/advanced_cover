@@ -795,6 +795,31 @@ const sharedStyles = i$3 `
   }
 `;
 
+/** The eight compass points and their azimuth in degrees. */
+const COMPASS = [
+    ["N", 0],
+    ["NE", 45],
+    ["E", 90],
+    ["SE", 135],
+    ["S", 180],
+    ["SW", 225],
+    ["W", 270],
+    ["NW", 315],
+];
+const COMPASS_BY_DEG = Object.fromEntries(COMPASS.map(([label, deg]) => [deg, label]));
+/** Show the compass label for exact matches, otherwise the raw degrees. */
+function formatAzimuth(deg) {
+    return COMPASS_BY_DEG[deg] ?? `${deg}°`;
+}
+/**
+ * Bucket an azimuth to the nearest of the eight compass points (returned as
+ * degrees: 0, 45, … 315). A window at 200° maps to S (180°), at 210° to SW.
+ */
+function nearestCompassDeg(azimuth) {
+    const a = ((azimuth % 360) + 360) % 360;
+    return (Math.round(a / 45) % 8) * 45;
+}
+
 /** Entity IDs of the given domains, favorites first. */
 function entityIdsForDomains(hass, domains, favorites = []) {
     const all = Object.keys(hass.states)
@@ -834,16 +859,6 @@ function renderHelp(hass, key) {
 }
 
 const KINDS = ["shutter", "blind", "awning", "curtain", "shade", "other"];
-const COMPASS = [
-    ["N", 0],
-    ["NE", 45],
-    ["E", 90],
-    ["SE", 135],
-    ["S", 180],
-    ["SW", 225],
-    ["W", 270],
-    ["NW", 315],
-];
 const KIND_ICONS = {
     shutter: "mdi:window-shutter",
     blind: "mdi:blinds-horizontal",
@@ -935,6 +950,42 @@ class ViewCovers extends i {
         if (!areaId)
             return "";
         return this.hass.areas?.[areaId]?.name ?? areaId;
+    }
+    /**
+     * Group covers by area for display. Groups are sorted by area name; covers
+     * without an area go into a trailing "no area" group. Returns a flat list
+     * when no cover has an area assigned, so the plain list stays unchanged.
+     */
+    _groupByArea(covers) {
+        const groups = new Map();
+        for (const cover of covers) {
+            const key = cover.area_id ?? null;
+            const bucket = groups.get(key);
+            if (bucket)
+                bucket.push(cover);
+            else
+                groups.set(key, [cover]);
+        }
+        if (groups.size === 1 && groups.has(null)) {
+            return [{ areaId: null, label: "", covers }];
+        }
+        const withArea = [...groups.entries()]
+            .filter(([areaId]) => areaId !== null)
+            .map(([areaId, items]) => ({
+            areaId,
+            label: this._areaName(areaId),
+            covers: items,
+        }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+        const noArea = groups.get(null);
+        if (noArea) {
+            withArea.push({
+                areaId: null,
+                label: t(this.hass, "config_panel.covers_no_area"),
+                covers: noArea,
+            });
+        }
+        return withArea;
     }
     // ------------------------------------------------------------ dialog logic
     _openAdd() {
@@ -1055,7 +1106,7 @@ class ViewCovers extends i {
             ? b `<span>📍 ${this._areaName(cover.area_id)}</span>`
             : A}
               ${cover.azimuth != null
-            ? b `<span>🧭 ${cover.azimuth}°</span>`
+            ? b `<span>🧭 ${formatAzimuth(cover.azimuth)}</span>`
             : A}
               ${cover.contact_state
             ? b `<span title=${t(this.hass, "config_panel.covers_contact_state")}>
@@ -1511,7 +1562,16 @@ class ViewCovers extends i {
             ? b `<p class="error">${this._error}</p>`
             : A}
           ${snap.covers.length
-            ? snap.covers.map((c) => this._renderRow(c))
+            ? this._groupByArea(snap.covers).map((group) => group.label
+                ? b `
+                      <div class="section-title">
+                        <ha-icon icon="mdi:floor-plan"></ha-icon>
+                        ${group.label}
+                        <span class="muted">${group.covers.length}</span>
+                      </div>
+                      ${group.covers.map((c) => this._renderRow(c))}
+                    `
+                : group.covers.map((c) => this._renderRow(c)))
             : b `<div class="empty-state">
                 <ha-icon icon="mdi:window-shutter-alert"></ha-icon>
                 <p>${t(this.hass, "config_panel.covers_empty")}</p>
@@ -1989,6 +2049,33 @@ class ViewScenarios extends i {
       .slider-row input[type="number"] {
         width: 76px;
       }
+      .quick-add {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 8px;
+        margin-bottom: 10px;
+      }
+      .quick-add-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+      }
+      .quick-add-group {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-left: 8px;
+        border-left: 1px solid var(--divider-color);
+      }
+      .quick-add-sub {
+        font-size: 0.76rem;
+        color: var(--secondary-text-color);
+      }
+      .quick-add .chip {
+        white-space: nowrap;
+      }
     `,
     ]; }
     updated() {
@@ -2006,6 +2093,9 @@ class ViewScenarios extends i {
     // ------------------------------------------------------------------ helpers
     _coverName(coverItemId) {
         return (this.snapshot.covers.find((c) => c.id === coverItemId)?.name ?? coverItemId);
+    }
+    _areaName(areaId) {
+        return this.hass.areas?.[areaId]?.name ?? areaId;
     }
     _triggerSummary(s) {
         const trig = s.trigger.type === "fixed_time"
@@ -2473,6 +2563,22 @@ class ViewScenarios extends i {
         const assignments = this._draft.assignments.map((a, i) => i === index ? { ...a, ...patch } : a);
         this._patch({ assignments });
     }
+    /** Append the given covers as assignments, skipping already-assigned ones. */
+    _addCovers(covers) {
+        if (!this._draft || !covers.length)
+            return;
+        const assigned = new Set(this._draft.assignments.map((a) => a.cover_item_id));
+        const additions = covers
+            .filter((c) => !assigned.has(c.id))
+            .map((c) => ({
+            cover_item_id: c.id,
+            extra_conditions: [],
+            action_override: null,
+        }));
+        if (!additions.length)
+            return;
+        this._patch({ assignments: [...this._draft.assignments, ...additions] });
+    }
     _renderAssignment(draft, assignment, index) {
         const cover = this.snapshot.covers.find((c) => c.id === assignment.cover_item_id);
         const ov = assignment.action_override ?? emptyOverride();
@@ -2590,12 +2696,89 @@ class ViewScenarios extends i {
       </div>
     `;
     }
+    _renderQuickAdd(addable) {
+        if (!addable.length)
+            return A;
+        // Direction buckets: nearest-of-8 compass point per cover azimuth.
+        const byDir = new Map();
+        for (const c of addable) {
+            if (c.azimuth == null)
+                continue;
+            const deg = nearestCompassDeg(c.azimuth);
+            (byDir.get(deg) ?? byDir.set(deg, []).get(deg)).push(c);
+        }
+        // Room buckets, sorted by area name.
+        const byArea = new Map();
+        for (const c of addable) {
+            if (!c.area_id)
+                continue;
+            (byArea.get(c.area_id) ?? byArea.set(c.area_id, []).get(c.area_id)).push(c);
+        }
+        const areas = [...byArea.entries()]
+            .map(([id, covers]) => ({ id, name: this._areaName(id), covers }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const anyDir = [...byDir.values()].some((v) => v.length);
+        return b `
+      <div class="quick-add">
+        <span class="quick-add-label"
+          >${t(this.hass, "config_panel.scenarios_quick_add")}</span
+        >
+        <button
+          type="button"
+          class="chip"
+          @click=${() => this._addCovers(addable)}
+        >
+          ＋ ${t(this.hass, "config_panel.scenarios_quick_add_all", {
+            n: addable.length,
+        })}
+        </button>
+        ${anyDir
+            ? b `<span class="quick-add-group">
+              <span class="quick-add-sub"
+                >${t(this.hass, "config_panel.scenarios_quick_add_direction")}</span
+              >
+              ${COMPASS.map(([label, deg]) => {
+                const covers = byDir.get(deg) ?? [];
+                return covers.length
+                    ? b `<button
+                      type="button"
+                      class="chip"
+                      title=${t(this.hass, "config_panel.scenarios_quick_add_direction_title", {
+                        label,
+                        n: covers.length,
+                    })}
+                      @click=${() => this._addCovers(covers)}
+                    >
+                      🧭 ${label} ·${covers.length}
+                    </button>`
+                    : A;
+            })}
+            </span>`
+            : A}
+        ${areas.length
+            ? b `<span class="quick-add-group">
+              <span class="quick-add-sub"
+                >${t(this.hass, "config_panel.scenarios_quick_add_room")}</span
+              >
+              ${areas.map((a) => b `<button
+                  type="button"
+                  class="chip"
+                  @click=${() => this._addCovers(a.covers)}
+                >
+                  📍 ${a.name} ·${a.covers.length}
+                </button>`)}
+            </span>`
+            : A}
+      </div>
+    `;
+    }
     _renderCoversSection(draft) {
         const assignedIds = new Set(draft.assignments.map((a) => a.cover_item_id));
         const addable = this.snapshot.covers.filter((c) => !assignedIds.has(c.id));
         return b `
       <div class="section-title">${t(this.hass, "config_panel.scenarios_covers")}</div>
       ${renderHelp(this.hass, "assignments")}
+      ${this._renderQuickAdd(addable)}
       ${draft.assignments.map((a, i) => this._renderAssignment(draft, a, i))}
       ${addable.length
             ? b `
@@ -3109,7 +3292,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

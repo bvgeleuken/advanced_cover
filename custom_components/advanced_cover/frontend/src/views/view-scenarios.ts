@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { COMPASS, nearestCompassDeg } from "../compass";
 import { renderConditionEditor } from "../condition-editor";
 import {
   deleteScenario,
@@ -15,6 +16,7 @@ import { sharedStyles } from "../styles";
 import type {
   ActionOverride,
   Assignment,
+  CoverRuntime,
   HomeAssistant,
   PanelSnapshot,
   Scenario,
@@ -121,6 +123,33 @@ export class ViewScenarios extends LitElement {
       .slider-row input[type="number"] {
         width: 76px;
       }
+      .quick-add {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 8px;
+        margin-bottom: 10px;
+      }
+      .quick-add-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+      }
+      .quick-add-group {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-left: 8px;
+        border-left: 1px solid var(--divider-color);
+      }
+      .quick-add-sub {
+        font-size: 0.76rem;
+        color: var(--secondary-text-color);
+      }
+      .quick-add .chip {
+        white-space: nowrap;
+      }
     `,
   ];
 
@@ -147,6 +176,10 @@ export class ViewScenarios extends LitElement {
     return (
       this.snapshot.covers.find((c) => c.id === coverItemId)?.name ?? coverItemId
     );
+  }
+
+  private _areaName(areaId: string): string {
+    return this.hass.areas?.[areaId]?.name ?? areaId;
   }
 
   private _triggerSummary(s: Scenario): string {
@@ -652,6 +685,21 @@ export class ViewScenarios extends LitElement {
     this._patch({ assignments });
   }
 
+  /** Append the given covers as assignments, skipping already-assigned ones. */
+  private _addCovers(covers: CoverRuntime[]): void {
+    if (!this._draft || !covers.length) return;
+    const assigned = new Set(this._draft.assignments.map((a) => a.cover_item_id));
+    const additions: Assignment[] = covers
+      .filter((c) => !assigned.has(c.id))
+      .map((c) => ({
+        cover_item_id: c.id,
+        extra_conditions: [],
+        action_override: null,
+      }));
+    if (!additions.length) return;
+    this._patch({ assignments: [...this._draft.assignments, ...additions] });
+  }
+
   private _renderAssignment(draft: Scenario, assignment: Assignment, index: number) {
     const cover = this.snapshot.covers.find((c) => c.id === assignment.cover_item_id);
     const ov = assignment.action_override ?? emptyOverride();
@@ -780,12 +828,89 @@ export class ViewScenarios extends LitElement {
     `;
   }
 
+  private _renderQuickAdd(addable: CoverRuntime[]) {
+    if (!addable.length) return nothing;
+    // Direction buckets: nearest-of-8 compass point per cover azimuth.
+    const byDir = new Map<number, CoverRuntime[]>();
+    for (const c of addable) {
+      if (c.azimuth == null) continue;
+      const deg = nearestCompassDeg(c.azimuth);
+      (byDir.get(deg) ?? byDir.set(deg, []).get(deg)!).push(c);
+    }
+    // Room buckets, sorted by area name.
+    const byArea = new Map<string, CoverRuntime[]>();
+    for (const c of addable) {
+      if (!c.area_id) continue;
+      (byArea.get(c.area_id) ?? byArea.set(c.area_id, []).get(c.area_id)!).push(c);
+    }
+    const areas = [...byArea.entries()]
+      .map(([id, covers]) => ({ id, name: this._areaName(id), covers }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const anyDir = [...byDir.values()].some((v) => v.length);
+    return html`
+      <div class="quick-add">
+        <span class="quick-add-label"
+          >${t(this.hass, "config_panel.scenarios_quick_add")}</span
+        >
+        <button
+          type="button"
+          class="chip"
+          @click=${() => this._addCovers(addable)}
+        >
+          ＋ ${t(this.hass, "config_panel.scenarios_quick_add_all", {
+            n: addable.length,
+          })}
+        </button>
+        ${anyDir
+          ? html`<span class="quick-add-group">
+              <span class="quick-add-sub"
+                >${t(this.hass, "config_panel.scenarios_quick_add_direction")}</span
+              >
+              ${COMPASS.map(([label, deg]) => {
+                const covers = byDir.get(deg) ?? [];
+                return covers.length
+                  ? html`<button
+                      type="button"
+                      class="chip"
+                      title=${t(this.hass, "config_panel.scenarios_quick_add_direction_title", {
+                        label,
+                        n: covers.length,
+                      })}
+                      @click=${() => this._addCovers(covers)}
+                    >
+                      🧭 ${label} ·${covers.length}
+                    </button>`
+                  : nothing;
+              })}
+            </span>`
+          : nothing}
+        ${areas.length
+          ? html`<span class="quick-add-group">
+              <span class="quick-add-sub"
+                >${t(this.hass, "config_panel.scenarios_quick_add_room")}</span
+              >
+              ${areas.map(
+                (a) => html`<button
+                  type="button"
+                  class="chip"
+                  @click=${() => this._addCovers(a.covers)}
+                >
+                  📍 ${a.name} ·${a.covers.length}
+                </button>`
+              )}
+            </span>`
+          : nothing}
+      </div>
+    `;
+  }
+
   private _renderCoversSection(draft: Scenario) {
     const assignedIds = new Set(draft.assignments.map((a) => a.cover_item_id));
     const addable = this.snapshot.covers.filter((c) => !assignedIds.has(c.id));
     return html`
       <div class="section-title">${t(this.hass, "config_panel.scenarios_covers")}</div>
       ${renderHelp(this.hass, "assignments")}
+      ${this._renderQuickAdd(addable)}
       ${draft.assignments.map((a, i) => this._renderAssignment(draft, a, i))}
       ${addable.length
         ? html`
