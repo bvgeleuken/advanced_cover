@@ -2005,6 +2005,47 @@ class ViewScenarios extends i {
         padding: 2px 8px;
         line-height: 1;
       }
+      .daypart {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+      }
+      .daypart-emoji {
+        font-size: 0.95rem;
+        line-height: 1;
+      }
+      .daypart-label {
+        min-width: 5.5em;
+      }
+      .daybar {
+        position: relative;
+        flex: 1;
+        max-width: 200px;
+        height: 6px;
+        border-radius: 3px;
+        background: linear-gradient(
+          90deg,
+          rgba(63, 81, 181, 0.28) 0%,
+          rgba(255, 193, 7, 0.32) 25%,
+          rgba(255, 235, 59, 0.42) 50%,
+          rgba(255, 152, 0, 0.32) 75%,
+          rgba(63, 81, 181, 0.28) 100%
+        );
+      }
+      .daybar-marker {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        border: 1.5px solid var(--card-background-color);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+      }
       .seg {
         display: inline-flex;
         border: 1px solid var(--divider-color);
@@ -2116,6 +2157,78 @@ class ViewScenarios extends i {
     _todayTime(s) {
         const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
         return occ ? formatTime(occ.planned_at) : null;
+    }
+    /**
+     * Approximate minute-of-day this scenario fires, for the time-of-day bar.
+     * Prefers today's computed occurrence (real sun times + offset); otherwise
+     * derives it from the trigger definition so disabled/off-day scenarios still
+     * show where in the day they belong.
+     */
+    _scenarioMinute(s) {
+        const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
+        if (occ) {
+            const m = minutesOfDay(occ.planned_at);
+            if (m != null)
+                return m;
+        }
+        if (s.trigger.type === "fixed_time") {
+            const [h, mm] = (s.trigger.time_local ?? "").split(":").map(Number);
+            return Number.isFinite(h) && Number.isFinite(mm) ? h * 60 + mm : null;
+        }
+        const sr = this.snapshot.sun.sunrise
+            ? minutesOfDay(this.snapshot.sun.sunrise)
+            : null;
+        const ss = this.snapshot.sun.sunset
+            ? minutesOfDay(this.snapshot.sun.sunset)
+            : null;
+        let base = null;
+        if (s.trigger.sun_event === "sunrise")
+            base = sr;
+        else if (s.trigger.sun_event === "sunset")
+            base = ss;
+        else if (s.trigger.sun_event === "solar_noon")
+            base = sr != null && ss != null ? Math.round((sr + ss) / 2) : 12 * 60;
+        if (base == null)
+            return null;
+        return (((base + (s.trigger.offset_min ?? 0)) % 1440) + 1440) % 1440;
+    }
+    /** Map a minute-of-day to a coarse daypart with an emoji sun-position hint. */
+    _dayPart(min) {
+        if (min < 5 * 60)
+            return { key: "night", emoji: "🌙" };
+        if (min < 9 * 60)
+            return { key: "morning", emoji: "🌅" };
+        if (min < 12 * 60)
+            return { key: "forenoon", emoji: "🌤️" };
+        if (min < 14 * 60)
+            return { key: "noon", emoji: "☀️" };
+        if (min < 18 * 60)
+            return { key: "afternoon", emoji: "⛅" };
+        if (min < 21 * 60)
+            return { key: "evening", emoji: "🌇" };
+        return { key: "night", emoji: "🌙" };
+    }
+    _renderDaypart(s) {
+        const min = this._scenarioMinute(s);
+        if (min == null)
+            return A;
+        const part = this._dayPart(min);
+        const label = t(this.hass, `config_panel.scenarios_daypart_${part.key}`);
+        return b `
+      <div
+        class="daypart"
+        title="${label} · ${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}"
+      >
+        <span class="daypart-emoji">${part.emoji}</span>
+        <span class="daypart-label">${label}</span>
+        <div class="daybar">
+          <div
+            class="daybar-marker"
+            style="left:${(min / 1440) * 100}%"
+          ></div>
+        </div>
+      </div>
+    `;
     }
     _patch(patch) {
         if (!this._draft)
@@ -2269,6 +2382,7 @@ class ViewScenarios extends i {
             : A}
               → ${scenario.action.position}%
             </p>
+            ${this._renderDaypart(scenario)}
             ${scenario.warnings?.length
             ? b `<p class="warning">⚠ ${scenario.warnings.join(" · ")}</p>`
             : A}
@@ -2962,12 +3076,24 @@ class ViewToday extends i {
     constructor() {
         super(...arguments);
         this._busy = false;
+        this._expanded = new Set();
     }
     static { this.properties = {
         hass: { attribute: false },
         entryId: { type: String },
         snapshot: { attribute: false },
     }; }
+    static _occKey(occ) {
+        return `${occ.scenario_id}@${occ.planned_at}`;
+    }
+    _toggleOcc(occ) {
+        const key = ViewToday._occKey(occ);
+        if (this._expanded.has(key))
+            this._expanded.delete(key);
+        else
+            this._expanded.add(key);
+        this.requestUpdate();
+    }
     static { this.styles = [
         sharedStyles,
         i$3 `
@@ -3090,10 +3216,29 @@ class ViewToday extends i {
         font-size: 0.8rem;
         color: var(--secondary-text-color);
       }
+      .occ-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font: inherit;
+        font-size: 0.85rem;
+        color: var(--secondary-text-color);
+        background: none;
+        border: none;
+        padding: 2px 0;
+        cursor: pointer;
+      }
+      .occ-toggle:hover {
+        color: var(--primary-text-color);
+      }
+      .occ-toggle ha-icon {
+        --mdc-icon-size: 18px;
+      }
       .occ-assignments {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
+        margin-top: 6px;
       }
       .assignment-chip {
         display: inline-flex;
@@ -3175,6 +3320,7 @@ class ViewToday extends i {
     `;
     }
     _renderOccurrence(occ) {
+        const expanded = this._expanded.has(ViewToday._occKey(occ));
         return b `
       <div class="occ">
         <div class="occ-head">
@@ -3197,30 +3343,48 @@ class ViewToday extends i {
               >`
             : A}
         </div>
-        <div class="occ-assignments">
-          ${occ.assignments.map((run) => {
-            const badge = runBadge(occ, run);
-            const title = run.reason ?? "";
-            return b `
-              <span class="assignment-chip" title=${title}>
-                ${run.cover_name} → ${run.target_position}%
-                <span class="badge badge-${badge}"
-                  >${t(this.hass, `config_panel.status_${badge}`)}</span
-                >
-                ${run.status === "armed" && run.armed_until
-                ? b `<span class="occ-meta"
-                      >⏳ ${formatTime(run.armed_until)}</span
-                    >`
+        ${occ.assignments.length
+            ? b `
+              <button
+                type="button"
+                class="occ-toggle"
+                aria-expanded=${expanded ? "true" : "false"}
+                @click=${() => this._toggleOcc(occ)}
+              >
+                <ha-icon
+                  icon=${expanded ? "mdi:chevron-down" : "mdi:chevron-right"}
+                ></ha-icon>
+                ${t(this.hass, "config_panel.today_cover_count", {
+                n: occ.assignments.length,
+            })}
+              </button>
+              ${expanded
+                ? b `<div class="occ-assignments">
+                    ${occ.assignments.map((run) => {
+                    const badge = runBadge(occ, run);
+                    const title = run.reason ?? "";
+                    return b `
+                        <span class="assignment-chip" title=${title}>
+                          ${run.cover_name} → ${run.target_position}%
+                          <span class="badge badge-${badge}"
+                            >${t(this.hass, `config_panel.status_${badge}`)}</span
+                          >
+                          ${run.status === "armed" && run.armed_until
+                        ? b `<span class="occ-meta"
+                                >⏳ ${formatTime(run.armed_until)}</span
+                              >`
+                        : A}
+                        </span>
+                      `;
+                })}
+                  </div>`
                 : A}
-              </span>
-            `;
-        })}
-          ${!occ.assignments.length
-            ? b `<span class="muted"
+            `
+            : b `<div class="occ-assignments">
+              <span class="muted"
                 >${t(this.hass, "config_panel.today_no_assignments")}</span
-              >`
-            : A}
-        </div>
+              >
+            </div>`}
       </div>
     `;
     }
