@@ -132,7 +132,7 @@
     "today_empty_no_scenarios": "Noch keine Szenarien. Lege zuerst Covers an, dann Szenarien.",
     "today_empty_nothing_planned": "Für heute ist nichts geplant (Wochentage und Aktiv-Schalter prüfen).",
     "today_no_assignments": "Keine Covers zugewiesen",
-    "today_cover_count": "{n, plural, one {# Cover} other {# Covers}}",
+    "today_cover_count": "{n} Covers",
     "today_random_offset": "Random {n} min",
     "today_retry_until": "versucht bis {time}",
 
