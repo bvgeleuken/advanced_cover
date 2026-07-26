@@ -45,7 +45,9 @@ export const panelStyles = css`
   }
   .view-inner {
     width: 100%;
-    max-width: 920px;
+    max-width: 1100px;
+    container-type: inline-size;
+    container-name: acview;
   }
   .entry-picker {
     padding: 24px;
@@ -136,7 +138,7 @@ export const sharedStyles = css`
     margin: 6px 0 18px;
   }
 
-  /* Expandable inline help (ⓘ) */
+  /* Expandable inline help (info icon) */
   details.inline-help {
     margin: 6px 0 10px;
     font-size: 0.82rem;
@@ -159,16 +161,9 @@ export const sharedStyles = css`
     color: var(--primary-color);
   }
   details.inline-help .inline-help-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    font-size: 0.72rem;
-    line-height: 1;
-    border: 1px solid currentColor;
+    --mdc-icon-size: 16px;
     flex-shrink: 0;
+    color: currentColor;
   }
   details.inline-help p {
     margin: 8px 0 4px;
@@ -577,5 +572,266 @@ export const sharedStyles = css`
   table.plain th {
     color: var(--secondary-text-color);
     font-weight: 500;
+  }
+
+  /* ---- Redesign v0.3 shared components ------------------------------- */
+
+  /* Removable chip: icon sits at the chip's baseline, dimmed until hover. */
+  .chip.chip-removable ha-icon {
+    --mdc-icon-size: 15px;
+    opacity: 0.7;
+    vertical-align: -2px;
+  }
+
+  /* Preflight badge (would run / would skip / cannot evaluate). */
+  .preflight-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .preflight-badge ha-icon {
+    --mdc-icon-size: 15px;
+  }
+  .preflight-badge.would_run {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+  }
+  .preflight-badge.would_skip {
+    color: var(--warning-color, #f0b23a);
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 12%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--warning-color, #f0b23a) 45%,
+      transparent
+    );
+  }
+  .preflight-badge.unknown {
+    color: var(--secondary-text-color);
+    background: color-mix(in srgb, var(--secondary-text-color) 12%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--secondary-text-color) 40%,
+      transparent
+    );
+  }
+
+  /* Condition checklist line (preflight detail). */
+  .cond-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    padding: 3px 0;
+    color: var(--secondary-text-color);
+  }
+  .cond-check ha-icon {
+    --mdc-icon-size: 17px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .cond-check.ok ha-icon {
+    color: var(--success-color, #43a047);
+  }
+  .cond-check.fail {
+    color: var(--primary-text-color);
+  }
+  .cond-check.fail ha-icon {
+    color: var(--warning-color, #f0b23a);
+  }
+  .cond-check.na ha-icon {
+    color: var(--disabled-text-color, #6d7476);
+  }
+  .cond-check .cond-actual {
+    color: var(--primary-text-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Segmented icon button group (open · stop · close, filters). */
+  .icon-group {
+    display: inline-flex;
+    border: 1px solid var(--divider-color);
+    border-radius: 9px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .icon-group button {
+    font: inherit;
+    border: none;
+    background: transparent;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 34px;
+    padding: 0 6px;
+    border-left: 1px solid var(--divider-color);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .icon-group button:first-child {
+    border-left: none;
+  }
+  .icon-group button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    color: var(--primary-color);
+  }
+  .icon-group button.selected {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
+  .icon-group button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .icon-group ha-icon {
+    --mdc-icon-size: 20px;
+  }
+
+  /* Compact list row: fixed height, single line, expandable. */
+  .compact-row {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--divider-color);
+    border-radius: 10px;
+    background: var(--card-background-color);
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: border-color 0.12s ease;
+  }
+  .compact-row:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--divider-color));
+  }
+  .compact-row .accent {
+    width: 3px;
+    flex-shrink: 0;
+    background: var(--primary-color);
+  }
+  .compact-row .accent.inactive {
+    background: var(--disabled-text-color, #6d7476);
+  }
+  .compact-row .accent.danger {
+    background: var(--error-color, #d93025);
+  }
+
+  /* Icon-only button with a guaranteed hit area + focus ring. */
+  .iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .iconbtn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    color: var(--primary-color);
+  }
+  .iconbtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .iconbtn.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error-color) 14%, transparent);
+    color: var(--error-color);
+  }
+  .iconbtn ha-icon {
+    --mdc-icon-size: 22px;
+  }
+  .iconbtn:focus-visible,
+  .icon-group button:focus-visible,
+  .chip:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+  }
+
+  /* Meta line with inline mdi icons (room, azimuth, contact, next action). */
+  .meta-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 0.8rem;
+    color: var(--secondary-text-color);
+    min-width: 0;
+  }
+  .meta-line .meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .meta-line ha-icon {
+    --mdc-icon-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Segmented filter control (All / Upcoming / Issues). */
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--divider-color);
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .segmented button {
+    font: inherit;
+    font-size: 0.8rem;
+    border: none;
+    border-left: 1px solid var(--divider-color);
+    background: transparent;
+    color: var(--secondary-text-color);
+    padding: 6px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .segmented button:first-child {
+    border-left: none;
+  }
+  .segmented button.selected {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
+  .segmented .count {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 22%, transparent);
+    color: var(--warning-color, #f0b23a);
+  }
+  .segmented button.selected .count {
+    background: rgba(255, 255, 255, 0.25);
+    color: inherit;
+  }
+
+  /* Truncating text that must never wrap in a data row. */
+  .ellipsis {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
   }
 `;

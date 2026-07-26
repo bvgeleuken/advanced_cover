@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import voluptuous as vol
@@ -29,8 +30,19 @@ from .capabilities import (
     get_cover_capabilities,
     resolve_contact_state,
 )
-from .const import DOMAIN
+from .const import CONTACT_OPEN, CONTACT_TILTED, DOMAIN
 from .coordinator import AdvancedCoverCoordinator
+from .engine import (
+    SCOPE_ASSIGNMENT,
+    SCOPE_SCENARIO,
+    VERDICT_WOULD_RUN,
+    CoverContext,
+    disabled_condition_eval,
+    evaluate_conditions_detailed,
+    rollup_preflight,
+    safety_condition_eval,
+    safety_would_block,
+)
 from .executor import current_cover_position
 from .models import CoverItem, EntryConfig, EntryData, Scenario, new_id
 from .scheduler import AdvancedCoverScheduler
@@ -69,6 +81,32 @@ def _entity_missing(hass: HomeAssistant, entity_id: str | None) -> bool:
     return bool(entity_id) and hass.states.get(entity_id) is None
 
 
+def _resolved_contact(hass: HomeAssistant, cover: CoverItem) -> str | None:
+    """Resolve the cover's contact abstraction, or ``None`` without a sensor."""
+    if not cover.contact_entity_id:
+        return None
+    raw = hass.states.get(cover.contact_entity_id)
+    return resolve_contact_state(raw.state if raw else None, cover.contact_state_map)
+
+
+def _safety_blocked_now(hass: HomeAssistant, cover: CoverItem) -> bool:
+    """Mirror the safety binary_sensor: contact currently blocks closing."""
+    contact = _resolved_contact(hass, cover)
+    if contact == CONTACT_OPEN:
+        return True
+    return bool(contact == CONTACT_TILTED and cover.safety.block_when_tilted)
+
+
+def _cover_context(hass: HomeAssistant, cover: CoverItem) -> CoverContext:
+    """Build the engine's cover snapshot (same shape as the scheduler's)."""
+    position = current_cover_position(hass.states.get(cover.cover_entity_id))
+    return CoverContext(
+        position=position,
+        contact=_resolved_contact(hass, cover) or "unknown",
+        contact_entity_id=cover.contact_entity_id,
+    )
+
+
 def _cover_runtime_info(
     hass: HomeAssistant,
     scheduler: AdvancedCoverScheduler,
@@ -77,9 +115,6 @@ def _cover_runtime_info(
     """Live info for one cover: capabilities, position, contact, warnings."""
     caps = get_cover_capabilities(hass, cover.cover_entity_id)
     state = hass.states.get(cover.cover_entity_id)
-    contact_raw = (
-        hass.states.get(cover.contact_entity_id) if cover.contact_entity_id else None
-    )
     warnings = [
         entity_id
         for entity_id in (
@@ -94,16 +129,95 @@ def _cover_runtime_info(
         **cover.to_dict(),
         "capabilities": caps.to_dict(),
         "current_position": current_cover_position(state),
-        "contact_state": (
-            resolve_contact_state(
-                contact_raw.state if contact_raw else None, cover.contact_state_map
-            )
-            if cover.contact_entity_id
-            else None
-        ),
+        "contact_state": _resolved_contact(hass, cover),
+        "safety_blocked": _safety_blocked_now(hass, cover),
         "next_action": scheduler.next_action_for_cover(cover.id),
         "missing_entities": warnings,
     }
+
+
+def _get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
+    """State accessor for the pure engine."""
+
+    def _lookup(entity_id: str) -> str | None:
+        st = hass.states.get(entity_id)
+        return st.state if st else None
+
+    return _lookup
+
+
+def _assignment_preflight(
+    hass: HomeAssistant,
+    data: EntryData,
+    scenario: Scenario,
+    cover: CoverItem | None,
+    run: dict[str, Any],
+    *,
+    now_iso: str,
+) -> dict[str, Any]:
+    """Preflight for one cover run: extra conditions + safety + availability."""
+    assignment = next(
+        (a for a in scenario.assignments if a.cover_item_id == run["cover_item_id"]),
+        None,
+    )
+    if cover is None or assignment is None:
+        return rollup_preflight([disabled_condition_eval(SCOPE_ASSIGNMENT)], now_iso)
+    if not data.config.enabled or not cover.enabled:
+        return rollup_preflight([disabled_condition_eval(SCOPE_ASSIGNMENT)], now_iso)
+    ctx = _cover_context(hass, cover)
+    evals = evaluate_conditions_detailed(
+        assignment.extra_conditions, _get_state(hass), ctx, SCOPE_ASSIGNMENT
+    )
+    if cover.contact_entity_id:
+        blocked = safety_would_block(
+            contact=ctx.contact,
+            block_when_tilted=cover.safety.block_when_tilted,
+            ventilation_position=cover.safety.ventilation_position,
+            target_position=int(run["target_position"]),
+            current_position=ctx.position,
+        )
+        if blocked:
+            evals.append(
+                safety_condition_eval(
+                    blocked=True,
+                    ventilation_position=cover.safety.ventilation_position,
+                )
+            )
+    return rollup_preflight(evals, now_iso)
+
+
+def _enrich_occurrence(
+    hass: HomeAssistant, data: EntryData, occ_dict: dict[str, Any], now_iso: str
+) -> dict[str, Any]:
+    """Attach preflight, covers_would_run and per-run preflight to a plan block."""
+    scenario = data.scenario_by_id(occ_dict["scenario_id"])
+    if occ_dict.get("fired") or scenario is None:
+        occ_dict["preflight"] = None
+        occ_dict["covers_would_run"] = 0
+        return occ_dict
+
+    # Block-level preflight: the scenario's own conditions (shared by all covers).
+    if not data.config.enabled:
+        block_evals = [disabled_condition_eval(SCOPE_SCENARIO)]
+    else:
+        block_evals = evaluate_conditions_detailed(
+            scenario.conditions, _get_state(hass), CoverContext(), SCOPE_SCENARIO
+        )
+    block_pf = rollup_preflight(block_evals, now_iso)
+    occ_dict["preflight"] = block_pf
+
+    would_run = 0
+    for run in occ_dict.get("assignments", []):
+        cover = data.covers.get(run["cover_item_id"])
+        pf = _assignment_preflight(hass, data, scenario, cover, run, now_iso=now_iso)
+        run["preflight"] = pf
+        if (
+            block_pf["verdict"] == VERDICT_WOULD_RUN
+            and pf["verdict"] == VERDICT_WOULD_RUN
+        ):
+            would_run += 1
+    occ_dict["covers_would_run"] = would_run
+    return occ_dict
 
 
 def _scenario_warnings(
@@ -151,8 +265,13 @@ def _snapshot(
     """Full panel state for one entry."""
     data = coordinator.data_model
     today = dt_util.now().date()
+    now_iso = dt_util.now().isoformat()
     sun: dict[str, str | None] = {}
-    for event, astral in (("sunrise", "sunrise"), ("sunset", "sunset")):
+    for event, astral in (
+        ("sunrise", "sunrise"),
+        ("sunset", "sunset"),
+        ("solar_noon", "noon"),
+    ):
         when = get_astral_event_date(hass, astral, today)
         sun[event] = dt_util.as_local(when).isoformat() if when else None
     return {
@@ -165,10 +284,13 @@ def _snapshot(
             {**s.to_dict(), "warnings": _scenario_warnings(hass, data, s)}
             for s in data.scenarios
         ],
-        "plan": [occ.to_dict() for occ in coordinator.day_plan],
+        "plan": [
+            _enrich_occurrence(hass, data, occ.to_dict(), now_iso)
+            for occ in coordinator.day_plan
+        ],
         "log": list(coordinator.action_log),
         "sun": sun,
-        "now": dt_util.now().isoformat(),
+        "now": now_iso,
     }
 
 

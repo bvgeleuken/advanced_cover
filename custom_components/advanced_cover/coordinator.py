@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
+from homeassistant.helpers.event import (
+    EventStateChangedData,
+    async_call_later,
+    async_track_state_change_event,
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -19,6 +25,10 @@ if TYPE_CHECKING:
     from .scheduler import Occurrence
 
 _LOGGER = logging.getLogger(__name__)
+
+# Debounce for the live preflight push: collapse a burst of state changes
+# (someone arriving home flips several entities) into one snapshot.
+_PREFLIGHT_DEBOUNCE_S = 1.0
 
 
 class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -38,6 +48,10 @@ class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Volatile per-day state, rebuilt at midnight/restart (plan: no tracking).
         self.day_plan: list[Occurrence] = []
         self.action_log: deque[dict[str, Any]] = deque(maxlen=EVENT_LOG_SIZE)
+        # Live preflight: track condition-referenced entities and push a fresh
+        # snapshot (debounced) whenever one of them changes.
+        self._state_unsub: CALLBACK_TYPE | None = None
+        self._debounce_unsub: CALLBACK_TYPE | None = None
 
     @property
     def data_model(self) -> EntryData:
@@ -56,9 +70,73 @@ class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Persist entry data, notify entities/panel and reschedule."""
         await self.store.async_save()
         self.async_update_listeners()
+        self._resubscribe_referenced_entities()
         domain_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         if domain_data and (scheduler := domain_data.get("scheduler")):
             await scheduler.async_rebuild_plan()
+
+    # ------------------------------------------------- live preflight tracking
+
+    def _referenced_entities(self) -> set[str]:
+        """Entities whose state feeds a preflight verdict (conditions + covers)."""
+        ids: set[str] = set()
+        data = self.store.data
+        for cover in data.covers.values():
+            if cover.cover_entity_id:
+                ids.add(cover.cover_entity_id)
+            if cover.contact_entity_id:
+                ids.add(cover.contact_entity_id)
+        for scenario in data.scenarios:
+            conditions = [
+                *scenario.conditions,
+                *(c for a in scenario.assignments for c in a.extra_conditions),
+            ]
+            for cond in conditions:
+                ids.update(cond.external_entity_ids())
+        return ids
+
+    @callback
+    def async_setup_state_tracking(self) -> None:
+        """Start pushing snapshots when referenced entities change."""
+        self._resubscribe_referenced_entities()
+
+    @callback
+    def _resubscribe_referenced_entities(self) -> None:
+        """(Re)subscribe to the current set of referenced entities."""
+        if self._state_unsub is not None:
+            self._state_unsub()
+            self._state_unsub = None
+        entities = sorted(self._referenced_entities())
+        if not entities:
+            return
+        self._state_unsub = async_track_state_change_event(
+            self.hass, entities, self._on_referenced_state_change
+        )
+
+    @callback
+    def _on_referenced_state_change(self, _event: Event[EventStateChangedData]) -> None:
+        """Debounce a burst of changes into a single snapshot push."""
+        if self._debounce_unsub is not None:
+            self._debounce_unsub()
+        self._debounce_unsub = async_call_later(
+            self.hass, _PREFLIGHT_DEBOUNCE_S, self._debounced_push
+        )
+
+    @callback
+    def _debounced_push(self, _now: datetime) -> None:
+        """Fire after the debounce window: refresh the panel snapshot."""
+        self._debounce_unsub = None
+        self.async_update_listeners()
+
+    @callback
+    def async_shutdown_state_tracking(self) -> None:
+        """Release the state-change listener and any pending debounce."""
+        if self._state_unsub is not None:
+            self._state_unsub()
+            self._state_unsub = None
+        if self._debounce_unsub is not None:
+            self._debounce_unsub()
+            self._debounce_unsub = None
 
     def set_day_plan(self, plan: list[Occurrence]) -> None:
         """Replace the day plan and notify listeners."""

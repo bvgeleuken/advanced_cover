@@ -6,6 +6,9 @@ from custom_components.advanced_cover.engine import (
     CoverContext,
     evaluate_condition,
     evaluate_conditions,
+    evaluate_conditions_detailed,
+    rollup_preflight,
+    safety_would_block,
 )
 from custom_components.advanced_cover.models import Condition
 
@@ -147,3 +150,108 @@ def test_same_entity_state_conditions_are_or_merged():
 
 def test_empty_conditions_pass():
     assert evaluate_conditions([], states({}), CTX).passed
+
+
+# ------------------------------------------------------------------- preflight
+
+
+def test_preflight_would_run_when_all_pass():
+    conds = [Condition(type="entity_state", entity_id="s.w", states=["on"])]
+    evals = evaluate_conditions_detailed(conds, states({"s.w": "on"}), CTX, "scenario")
+    pf = rollup_preflight(evals, "NOW")
+    assert pf["verdict"] == "would_run"
+    assert pf["failing"] == 0
+    assert evals[0].ok is True
+
+
+def test_preflight_would_skip_reports_reason():
+    conds = [Condition(type="entity_state", entity_id="s.w", states=["on"])]
+    evals = evaluate_conditions_detailed(conds, states({"s.w": "off"}), CTX, "scenario")
+    pf = rollup_preflight(evals, "NOW")
+    assert pf["verdict"] == "would_skip"
+    assert pf["failing"] == 1
+    assert evals[0].ok is False
+    assert evals[0].actual == "off"
+    assert evals[0].summary_key == "config_panel.cond_sum_entity_state"
+    assert evals[0].summary_values["expected"] == "on"
+
+
+def test_preflight_unknown_on_unavailable():
+    conds = [Condition(type="entity_state", entity_id="s.w", states=["on"])]
+    evals = evaluate_conditions_detailed(
+        conds, states({"s.w": "unavailable"}), CTX, "scenario"
+    )
+    pf = rollup_preflight(evals, "NOW")
+    assert pf["verdict"] == "unknown"
+    assert evals[0].ok is None
+    assert evals[0].summary_key == "config_panel.cond_sum_unavailable"
+
+
+def test_preflight_empty_is_would_run():
+    assert rollup_preflight([], "NOW")["verdict"] == "would_run"
+
+
+def test_preflight_false_beats_null():
+    conds = [
+        Condition(type="entity_state", entity_id="s.a", states=["on"]),
+        Condition(type="entity_state", entity_id="s.b", states=["on"]),
+    ]
+    evals = evaluate_conditions_detailed(
+        conds, states({"s.a": "off", "s.b": "unavailable"}), CTX, "scenario"
+    )
+    # one false + one null → would_skip wins
+    assert rollup_preflight(evals, "NOW")["verdict"] == "would_skip"
+
+
+def test_safety_would_block_matches_executor_semantics():
+    # open window, closing move below ventilation → blocked
+    assert safety_would_block(
+        contact="open",
+        block_when_tilted=False,
+        ventilation_position=20,
+        target_position=0,
+        current_position=100,
+    )
+    # opening move (target >= current) is never blocked
+    assert not safety_would_block(
+        contact="open",
+        block_when_tilted=False,
+        ventilation_position=20,
+        target_position=100,
+        current_position=0,
+    )
+    # target at/above ventilation is fine
+    assert not safety_would_block(
+        contact="open",
+        block_when_tilted=False,
+        ventilation_position=20,
+        target_position=20,
+        current_position=100,
+    )
+    # tilted only blocks when configured
+    assert not safety_would_block(
+        contact="tilted",
+        block_when_tilted=False,
+        ventilation_position=20,
+        target_position=0,
+        current_position=100,
+    )
+    assert safety_would_block(
+        contact="tilted",
+        block_when_tilted=True,
+        ventilation_position=20,
+        target_position=0,
+        current_position=100,
+    )
+
+
+def test_preflight_verdict_matches_trigger_path():
+    # The preflight ok flags and the trigger-path pass must agree.
+    conds = [
+        Condition(type="entity_state", entity_id="s.w", states=["sunny"]),
+        Condition(type="numeric_state", entity_id="s.lux", above=100),
+    ]
+    get = states({"s.w": "sunny", "s.lux": "150"})
+    evals = evaluate_conditions_detailed(conds, get, CTX, "scenario")
+    trigger = evaluate_conditions(conds, get, CTX)
+    assert (rollup_preflight(evals, "NOW")["verdict"] == "would_run") == trigger.passed

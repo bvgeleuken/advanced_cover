@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { COMPASS, formatAzimuth } from "../compass";
+import { compassStyles, formatAzimuth, renderCompass } from "../compass";
 import { deleteCover, probeCover, saveCover, testCover } from "../data/api";
 import { renderEntityDatalist } from "../entity-input";
 import { defineCustomElementOnce, formatApiError, formatTime } from "../helpers";
@@ -63,35 +63,249 @@ export class ViewCovers extends LitElement {
   private _draft: CoverItem | null = null;
   private _draftCaps: CoverCapabilities | null = null;
   private _testPosition: Record<string, number> = {};
+  private _expanded = new Set<string>();
+  private _search = "";
 
   static styles = [
     sharedStyles,
+    compassStyles,
     css`
-      .cover-badges {
+      .toolbar {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
         flex-wrap: wrap;
-        font-size: 0.82rem;
-        color: var(--secondary-text-color);
+        margin-bottom: 12px;
       }
-      .cover-badges ha-icon {
-        --mdc-icon-size: 17px;
-      }
-      .pos-wrap {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 130px;
-      }
-      .pos-wrap .position-bar {
-        flex: 1;
-      }
-      .test-row {
+      .search {
         display: flex;
         align-items: center;
         gap: 6px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 4px 10px;
+        flex: 1;
+        max-width: 320px;
+      }
+      .search ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .search input {
+        border: none;
+        background: none;
+        padding: 4px 0;
+        width: 100%;
+      }
+      .search input:focus-visible {
+        outline: none;
+      }
+      /* Room group header with collective control. */
+      .group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 18px 0 8px;
+      }
+      .group-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+      .group-title ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .group-title .n {
+        color: var(--secondary-text-color);
+        font-weight: 400;
+      }
+      .group-next {
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+      }
+      .group-head .icon-group {
+        margin-left: auto;
+      }
+      /* Compact row. */
+      .crow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 12px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+      }
+      .crow > ha-switch {
+        flex-shrink: 0;
+      }
+      .kind-icon {
+        --mdc-icon-size: 21px;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .crow-main {
+        min-width: 0;
+        flex: 1 1 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .crow-name {
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .crow-pos {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 150px;
+        flex-shrink: 0;
+      }
+      .crow-pos .position-bar {
+        flex: 1;
+      }
+      .crow-pos .pos-val {
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+        width: 34px;
+        text-align: right;
+      }
+      .crow-next {
+        flex: 1 1 0;
+        min-width: 0;
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .crow-next ha-icon {
+        --mdc-icon-size: 16px;
+        flex-shrink: 0;
+      }
+      .crow-chevron {
+        --mdc-icon-size: 22px;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .link-off {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--error-color, #d93025);
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      .link-off ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      /* Expanded detail. */
+      .crow-detail {
+        padding: 4px 14px 14px 26px;
+        border-top: 1px solid var(--divider-color);
+      }
+      .drive-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         flex-wrap: wrap;
+        margin: 10px 0;
+      }
+      .drive-row .slider {
+        flex: 1;
+        min-width: 160px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .drive-row .slider input[type="range"] {
+        flex: 1;
+      }
+      .safety-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 0.8rem;
+        color: var(--warning-color, #f0b23a);
+        margin: 4px 0;
+      }
+      .safety-note ha-icon {
+        --mdc-icon-size: 16px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .detail-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .today-actions {
+        margin-top: 12px;
+      }
+      .today-actions .ta-title {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .ta-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.82rem;
+        padding: 3px 0;
+      }
+      .ta-row .ta-time {
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .ta-row .ta-name {
+        flex: 1;
+        min-width: 0;
+      }
+      /* Dialog sticky header/footer. */
+      .dialog.sticky {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        max-height: 92vh;
+      }
+      .dialog-head {
+        position: sticky;
+        top: 0;
+        background: var(--card-background-color);
+        padding: 20px 24px 12px;
+        border-bottom: 1px solid var(--divider-color);
+        z-index: 1;
+      }
+      .dialog-head h3 {
+        margin: 0;
+      }
+      .dialog-scroll {
+        overflow-y: auto;
+        padding: 12px 24px;
+      }
+      .dialog-foot {
+        position: sticky;
+        bottom: 0;
+        background: var(--card-background-color);
+        padding: 12px 24px;
+        border-top: 1px solid var(--divider-color);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
       }
       .map-row {
         display: flex;
@@ -103,31 +317,46 @@ export class ViewCovers extends LitElement {
       .map-row select {
         width: auto;
       }
-      .caps-chips {
-        margin: 6px 0 0;
+
+      @container acview (max-width: 900px) {
+        .crow-next {
+          display: none;
+        }
+      }
+      @container acview (max-width: 620px) {
+        .crow .icon-group {
+          display: none;
+        }
+        .crow-pos {
+          width: 96px;
+        }
       }
     `,
   ];
 
   private _areaName(areaId: string | null): string {
-    if (!areaId) return "";
+    if (!areaId) return t(this.hass, "config_panel.covers_no_area");
     return this.hass.areas?.[areaId]?.name ?? areaId;
   }
 
-  /**
-   * Group covers by area for display. Groups are sorted by area name; covers
-   * without an area go into a trailing "no area" group. Returns a flat list
-   * when no cover has an area assigned, so the plain list stays unchanged.
-   */
+  private _filteredCovers(): CoverRuntime[] {
+    const q = this._search.trim().toLowerCase();
+    if (!q) return this.snapshot.covers;
+    return this.snapshot.covers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.cover_entity_id.toLowerCase().includes(q) ||
+        this._areaName(c.area_id).toLowerCase().includes(q)
+    );
+  }
+
   private _groupByArea(
     covers: CoverRuntime[]
   ): Array<{ areaId: string | null; label: string; covers: CoverRuntime[] }> {
     const groups = new Map<string | null, CoverRuntime[]>();
     for (const cover of covers) {
       const key = cover.area_id ?? null;
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(cover);
-      else groups.set(key, [cover]);
+      (groups.get(key) ?? groups.set(key, []).get(key)!).push(cover);
     }
     if (groups.size === 1 && groups.has(null)) {
       return [{ areaId: null, label: "", covers }];
@@ -144,7 +373,7 @@ export class ViewCovers extends LitElement {
     if (noArea) {
       withArea.push({
         areaId: null,
-        label: t(this.hass, "config_panel.covers_no_area"),
+        label: this._areaName(null),
         covers: noArea,
       });
     }
@@ -161,8 +390,20 @@ export class ViewCovers extends LitElement {
   }
 
   private _openEdit(cover: CoverRuntime): void {
-    const { capabilities, current_position, contact_state, next_action, missing_entities, ...item } =
-      cover;
+    const {
+      capabilities,
+      current_position,
+      contact_state,
+      safety_blocked,
+      next_action,
+      missing_entities,
+      ...item
+    } = cover;
+    void current_position;
+    void contact_state;
+    void safety_blocked;
+    void next_action;
+    void missing_entities;
     this._draft = JSON.parse(JSON.stringify(item)) as CoverItem;
     this._draftCaps = capabilities;
     this._error = undefined;
@@ -185,9 +426,7 @@ export class ViewCovers extends LitElement {
       );
       this._draftCaps = res.capabilities;
       const patch: Partial<CoverItem> = {};
-      if (!this._draft.id) {
-        patch.kind = res.suggested_kind;
-      }
+      if (!this._draft.id) patch.kind = res.suggested_kind;
       if (
         res.suggested_contact_map &&
         Object.keys(this._draft.contact_state_map).length === 0
@@ -248,154 +487,322 @@ export class ViewCovers extends LitElement {
   }
 
   private async _test(
-    cover: CoverRuntime,
-    command: "open" | "close" | "stop" | "position"
+    coverId: string,
+    command: "open" | "close" | "stop" | "position",
+    position?: number
   ): Promise<void> {
     try {
-      await testCover(
-        this.hass,
-        this.entryId,
-        cover.id,
-        command,
-        command === "position" ? (this._testPosition[cover.id] ?? 50) : undefined
-      );
+      await testCover(this.hass, this.entryId, coverId, command, position);
     } catch (e) {
       this._error = formatApiError(e, this.hass);
       this.requestUpdate();
     }
   }
 
+  private async _groupTest(
+    covers: CoverRuntime[],
+    command: "open" | "close" | "stop"
+  ): Promise<void> {
+    for (const c of covers) {
+      if (!c.missing_entities.length) await this._test(c.id, command);
+    }
+  }
+
+  private _toggleExpand(id: string): void {
+    if (this._expanded.has(id)) this._expanded.delete(id);
+    else this._expanded.add(id);
+    this.requestUpdate();
+  }
+
   // -------------------------------------------------------------- rendering
 
+  private _renderControlGroup(cover: CoverRuntime) {
+    return html`
+      <div class="icon-group" @click=${(e: Event) => e.stopPropagation()}>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_open")}
+          aria-label=${t(this.hass, "config_panel.covers_test_open")}
+          @click=${() => this._test(cover.id, "open")}
+        >
+          <ha-icon icon="mdi:arrow-up"></ha-icon>
+        </button>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_stop")}
+          aria-label=${t(this.hass, "config_panel.covers_test_stop")}
+          @click=${() => this._test(cover.id, "stop")}
+        >
+          <ha-icon icon="mdi:stop"></ha-icon>
+        </button>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_close")}
+          aria-label=${t(this.hass, "config_panel.covers_test_close")}
+          @click=${() => this._test(cover.id, "close")}
+        >
+          <ha-icon icon="mdi:arrow-down"></ha-icon>
+        </button>
+      </div>
+    `;
+  }
+
   private _renderRow(cover: CoverRuntime) {
+    const expanded = this._expanded.has(cover.id);
+    const missing = cover.missing_entities.length > 0;
+    const na = cover.next_action;
+    const accentClass = missing
+      ? "danger"
+      : cover.enabled
+        ? ""
+        : "inactive";
+    return html`
+      <div class="compact-row ${cover.enabled ? "" : "paused"}">
+        <div class="accent ${accentClass}"></div>
+        <button
+          type="button"
+          class="crow"
+          aria-expanded=${expanded ? "true" : "false"}
+          @click=${() => this._toggleExpand(cover.id)}
+        >
+          <ha-switch
+            .checked=${cover.enabled}
+            title=${t(this.hass, "config_panel.covers_toggle_automation")}
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this._toggleEnabled(cover);
+            }}
+          ></ha-switch>
+          <ha-icon
+            class="kind-icon"
+            .icon=${KIND_ICONS[cover.kind] ?? KIND_ICONS.other}
+          ></ha-icon>
+          <div class="crow-main">
+            <span class="crow-name ellipsis">${cover.name}</span>
+            <span class="meta-line">
+              ${cover.azimuth != null
+                ? html`<span class="meta"
+                    ><ha-icon icon="mdi:compass-outline"></ha-icon
+                    >${formatAzimuth(cover.azimuth)}</span
+                  >`
+                : nothing}
+              ${cover.contact_state
+                ? html`<span class="meta"
+                    ><ha-icon
+                      .icon=${CONTACT_ICONS[cover.contact_state] ??
+                      CONTACT_ICONS.unknown}
+                    ></ha-icon
+                    >${t(this.hass, `config_panel.contact_${cover.contact_state}`)}</span
+                  >`
+                : nothing}
+              ${cover.safety_blocked
+                ? html`<span class="meta" style="color:var(--error-color)"
+                    ><ha-icon icon="mdi:shield-alert-outline"></ha-icon>Safety</span
+                  >`
+                : nothing}
+              ${cover.kind === "awning"
+                ? html`<span class="meta"
+                    >${t(this.hass, "config_panel.covers_awning_extended")}</span
+                  >`
+                : nothing}
+            </span>
+          </div>
+          ${cover.current_position != null
+            ? html`<div class="crow-pos">
+                <div class="position-bar">
+                  <div
+                    class="position-bar-fill"
+                    style="width:${cover.current_position}%"
+                  ></div>
+                </div>
+                <span class="pos-val">${cover.current_position}%</span>
+              </div>`
+            : html`<div class="crow-pos"></div>`}
+          <div class="crow-next">
+            ${na
+              ? html`<ha-icon
+                    icon=${na.armed ? "mdi:timer-sand" : "mdi:arrow-right-thin"}
+                  ></ha-icon>
+                  <span class="ellipsis"
+                    >${formatTime(na.when)} · ${na.position}% ${na.scenario_name}</span
+                  >`
+              : html`<span class="ellipsis"
+                  >${t(this.hass, "config_panel.covers_no_action_today")}</span
+                >`}
+          </div>
+          ${missing
+            ? html`<span class="link-off"
+                ><ha-icon icon="mdi:link-variant-off"></ha-icon
+                >${t(this.hass, "config_panel.covers_link_missing")}</span
+              >`
+            : this._renderControlGroup(cover)}
+          <ha-icon
+            class="crow-chevron"
+            icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+          ></ha-icon>
+        </button>
+        ${expanded ? this._renderDetail(cover) : nothing}
+      </div>
+    `;
+  }
+
+  private _renderDetail(cover: CoverRuntime) {
     const planRuns = this.snapshot.plan.flatMap((occ) =>
       occ.assignments
         .filter((r) => r.cover_item_id === cover.id)
         .map((r) => ({ occ, r }))
     );
+    const testPos = this._testPosition[cover.id] ?? cover.current_position ?? 50;
     return html`
-      <div class="list-row-wrap">
-        <div class="list-row-accent ${cover.enabled ? "" : "inactive"}"></div>
-        <div class="list-row">
-          <div class="list-row-toggle" title=${t(this.hass, "config_panel.covers_toggle_automation")}>
-            <ha-switch
-              .checked=${cover.enabled}
-              @click=${() => this._toggleEnabled(cover)}
-            ></ha-switch>
+      <div class="crow-detail">
+        ${cover.missing_entities.length
+          ? html`<p class="warning">
+              ${t(this.hass, "config_panel.covers_missing_entities", {
+                entities: cover.missing_entities.join(", "),
+              })}
+            </p>`
+          : nothing}
+        ${cover.capabilities.supports_position && !cover.missing_entities.length
+          ? html`<div class="drive-row">
+              <span class="muted">${t(this.hass, "config_panel.covers_test_drive")}</span>
+              <div class="slider">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  .value=${String(testPos)}
+                  @input=${(e: Event) => {
+                    this._testPosition = {
+                      ...this._testPosition,
+                      [cover.id]: Number((e.target as HTMLInputElement).value),
+                    };
+                    this.requestUpdate();
+                  }}
+                />
+                <span class="pos-val">${testPos}%</span>
+              </div>
+              <button
+                type="button"
+                class="iconbtn"
+                title=${t(this.hass, "config_panel.covers_go_position")}
+                aria-label=${t(this.hass, "config_panel.covers_go_position")}
+                @click=${() => this._test(cover.id, "position", testPos)}
+              >
+                <ha-icon icon="mdi:target"></ha-icon>
+              </button>
+            </div>`
+          : nothing}
+        ${cover.safety_blocked
+          ? html`<div class="safety-note">
+              <ha-icon icon="mdi:shield-alert-outline"></ha-icon>
+              <span
+                >${t(this.hass, "config_panel.cond_sum_safety", {
+                  ventilation: cover.safety.ventilation_position,
+                })}</span
+              >
+            </div>`
+          : nothing}
+        <div class="today-actions">
+          <div class="ta-title">
+            ${t(this.hass, "config_panel.covers_today_actions", {
+              n: planRuns.length,
+            })}
           </div>
-          <div class="list-main">
-            <p class="list-name">
-              <ha-icon .icon=${KIND_ICONS[cover.kind] ?? KIND_ICONS.other}></ha-icon>
-              ${cover.name}
-            </p>
-            <div class="cover-badges">
-              ${cover.area_id
-                ? html`<span>📍 ${this._areaName(cover.area_id)}</span>`
-                : nothing}
-              ${cover.azimuth != null
-                ? html`<span>🧭 ${formatAzimuth(cover.azimuth)}</span>`
-                : nothing}
-              ${cover.contact_state
-                ? html`<span title=${t(this.hass, "config_panel.covers_contact_state")}>
-                    <ha-icon
-                      .icon=${CONTACT_ICONS[cover.contact_state] ?? CONTACT_ICONS.unknown}
-                    ></ha-icon>
-                    ${t(this.hass, `config_panel.contact_${cover.contact_state}`)}
-                  </span>`
-                : nothing}
-              ${cover.next_action
-                ? html`<span>
-                    ${cover.next_action.armed ? "⏳" : "→"}
-                    ${formatTime(cover.next_action.when)} ·
-                    ${cover.next_action.position}% (${cover.next_action.scenario_name})
-                  </span>`
-                : nothing}
-              ${cover.missing_entities.length
-                ? html`<span class="badge badge-unavailable"
-                    >${t(this.hass, "config_panel.covers_missing_entities", {
-                      entities: cover.missing_entities.join(", "),
-                    })}</span
-                  >`
-                : nothing}
-            </div>
-            ${cover.current_position != null
-              ? html`
-                  <div class="pos-wrap" style="margin-top:8px">
-                    <div class="position-bar">
-                      <div
-                        class="position-bar-fill"
-                        style="width:${cover.current_position}%"
-                      ></div>
-                    </div>
-                    <span class="muted">${cover.current_position}%</span>
-                  </div>
-                `
-              : nothing}
-          </div>
-          <div class="list-actions">
-            <div class="test-row">
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_open")} @click=${() => this._test(cover, "open")}>▲</button>
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_stop")} @click=${() => this._test(cover, "stop")}>■</button>
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_close")} @click=${() => this._test(cover, "close")}>▼</button>
-              ${cover.capabilities.supports_position
-                ? html`
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      style="width:64px"
-                      .value=${String(this._testPosition[cover.id] ?? 50)}
-                      @input=${(e: Event) => {
-                        this._testPosition = {
-                          ...this._testPosition,
-                          [cover.id]: Number((e.target as HTMLInputElement).value),
-                        };
-                      }}
-                    />
-                    <button class="btn-icon" @click=${() => this._test(cover, "position")}>
-                      %
-                    </button>
-                  `
-                : nothing}
-            </div>
-            <button class="btn-outline" @click=${() => this._openEdit(cover)}>
-              ${t(this.hass, "config_panel.covers_edit")}
-            </button>
-            <button class="btn-danger" @click=${() => this._delete(cover)}>
-              ${t(this.hass, "config_panel.covers_delete")}
-            </button>
-          </div>
-          <details class="expand" style="flex-basis:100%">
-            <summary>${t(this.hass, "config_panel.covers_today_summary")}</summary>
-            ${planRuns.length
-              ? html`
-                  <table class="plain">
-                    ${planRuns.map(
-                      ({ occ, r }) => html`
-                        <tr>
-                          <td>${formatTime(occ.planned_at)}</td>
-                          <td>${occ.scenario_name}</td>
-                          <td>${r.target_position}%</td>
-                          <td>
-                            <span class="badge badge-${occ.fired ? (r.status === "done" ? (r.result ?? "skipped") : r.status) : "planned"}">
-                              ${t(
-                                this.hass,
-                                `config_panel.status_${occ.fired ? (r.status === "done" ? (r.result ?? "skipped") : r.status) : "planned"}`
-                              )}
-                            </span>
-                          </td>
-                          <td class="muted">${r.reason ?? ""}</td>
-                        </tr>
-                      `
-                    )}
-                  </table>
-                `
-              : html`<p class="muted">
-                  ${t(this.hass, "config_panel.covers_today_none")}
-                </p>`}
-          </details>
+          ${planRuns.length
+            ? planRuns.map(
+                ({ occ, r }) => html`<div class="ta-row">
+                  <span class="ta-time">${formatTime(occ.planned_at)}</span>
+                  <span class="ta-name ellipsis">${occ.scenario_name}</span>
+                  <span class="muted">${r.target_position}%</span>
+                  <span
+                    class="badge badge-${occ.fired
+                      ? r.status === "done"
+                        ? (r.result ?? "skipped")
+                        : r.status
+                      : r.preflight?.verdict === "would_skip"
+                        ? "armed"
+                        : "planned"}"
+                    >${t(
+                      this.hass,
+                      `config_panel.status_${
+                        occ.fired
+                          ? r.status === "done"
+                            ? (r.result ?? "skipped")
+                            : r.status
+                          : "planned"
+                      }`
+                    )}</span
+                  >
+                </div>`
+              )
+            : html`<p class="muted">${t(this.hass, "config_panel.covers_today_none")}</p>`}
+        </div>
+        <div class="detail-actions">
+          <button class="btn-outline" @click=${() => this._openEdit(cover)}>
+            ${t(this.hass, "config_panel.covers_edit")}
+          </button>
+          <button class="btn-danger" @click=${() => this._delete(cover)}>
+            ${t(this.hass, "config_panel.covers_delete")}
+          </button>
         </div>
       </div>
+    `;
+  }
+
+  private _renderGroup(group: {
+    areaId: string | null;
+    label: string;
+    covers: CoverRuntime[];
+  }) {
+    const next = group.covers
+      .map((c) => c.next_action)
+      .filter((n): n is NonNullable<typeof n> => n != null)
+      .sort((a, b) => a.when.localeCompare(b.when))[0];
+    return html`
+      ${group.label
+        ? html`<div class="group-head">
+            <span class="group-title">
+              <ha-icon icon="mdi:map-marker-outline"></ha-icon>
+              ${group.label}
+              <span class="n">${group.covers.length}</span>
+            </span>
+            ${next
+              ? html`<span class="group-next"
+                  >${t(this.hass, "config_panel.covers_group_next", {
+                    time: formatTime(next.when),
+                    pos: next.position ?? 0,
+                  })}</span
+                >`
+              : nothing}
+            <div
+              class="icon-group"
+              title=${t(this.hass, "config_panel.covers_group_control")}
+            >
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_open")}
+                @click=${() => this._groupTest(group.covers, "open")}
+              >
+                <ha-icon icon="mdi:arrow-up"></ha-icon>
+              </button>
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_stop")}
+                @click=${() => this._groupTest(group.covers, "stop")}
+              >
+                <ha-icon icon="mdi:stop"></ha-icon>
+              </button>
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_close")}
+                @click=${() => this._groupTest(group.covers, "close")}
+              >
+                <ha-icon icon="mdi:arrow-down"></ha-icon>
+              </button>
+            </div>
+          </div>`
+        : nothing}
+      ${group.covers.map((c) => this._renderRow(c))}
     `;
   }
 
@@ -406,9 +813,7 @@ export class ViewCovers extends LitElement {
       <div class="section-title">
         ${t(this.hass, "config_panel.covers_contact_map_title")}
       </div>
-      <p class="section-desc">
-        ${t(this.hass, "config_panel.covers_contact_map_desc")}
-      </p>
+      <p class="section-desc">${t(this.hass, "config_panel.covers_contact_map_desc")}</p>
       ${renderHelp(this.hass, "contact_map")}
       ${entries.map(
         ([raw, meaning]) => html`
@@ -425,7 +830,7 @@ export class ViewCovers extends LitElement {
                 this._patchDraft({ contact_state_map: map });
               }}
             />
-            <span>→</span>
+            <ha-icon icon="mdi:arrow-right-thin"></ha-icon>
             <select
               .value=${meaning}
               @change=${(e: Event) =>
@@ -443,14 +848,15 @@ export class ViewCovers extends LitElement {
               )}
             </select>
             <button
-              class="cond-remove"
+              class="iconbtn danger"
+              aria-label=${t(this.hass, "config_panel.cond_remove")}
               @click=${() => {
                 const map = { ...draft.contact_state_map };
                 delete map[raw];
                 this._patchDraft({ contact_state_map: map });
               }}
             >
-              ✕
+              <ha-icon icon="mdi:close"></ha-icon>
             </button>
           </div>
         `
@@ -462,7 +868,7 @@ export class ViewCovers extends LitElement {
             contact_state_map: { ...draft.contact_state_map, "": "closed" },
           })}
       >
-        ＋ ${t(this.hass, "config_panel.covers_contact_map_add")}
+        ${t(this.hass, "config_panel.covers_contact_map_add")}
       </button>
     `;
   }
@@ -474,273 +880,303 @@ export class ViewCovers extends LitElement {
     const caps = this._draftCaps;
     const isAwning = draft.kind === "awning";
     return html`
-      <div class="dialog-backdrop" @click=${(e: Event) => {
-        if (e.target === e.currentTarget) {
-          this._draft = null;
-          this.requestUpdate();
-        }
-      }}>
-        <div class="dialog">
-          <h3>
-            ${draft.id
-              ? t(this.hass, "config_panel.covers_dialog_edit", { name: draft.name })
-              : t(this.hass, "config_panel.covers_dialog_new")}
-          </h3>
-          ${this._error ? html`<p class="error">${this._error}</p>` : nothing}
-
-          ${renderEntityDatalist(this.hass, "ac-covers-list", ["cover"])}
-          ${renderEntityDatalist(this.hass, "ac-contacts-list", [
-            "binary_sensor",
-            "sensor",
-          ])}
-          ${renderEntityDatalist(this.hass, "ac-scripts-list", ["script"])}
-          <datalist id="ac-areas-list">
-            ${areas.map((a) => html`<option value=${a.area_id}>${a.name}</option>`)}
-          </datalist>
-
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_name")}</label>
-              <input
-                type="text"
-                .value=${draft.name}
-                @input=${(e: Event) =>
-                  this._patchDraft({ name: (e.target as HTMLInputElement).value })}
-              />
-            </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_kind")}</label>
-              <select
-                .value=${draft.kind}
-                @change=${(e: Event) =>
-                  this._patchDraft({ kind: (e.target as HTMLSelectElement).value })}
-              >
-                ${KINDS.map(
-                  (k) => html`<option value=${k} ?selected=${k === draft.kind}>
-                    ${t(this.hass, `config_panel.kind_${k}`)}
-                  </option>`
-                )}
-              </select>
-            </div>
+      <div
+        class="dialog-backdrop"
+        @click=${(e: Event) => {
+          if (e.target === e.currentTarget) {
+            this._draft = null;
+            this.requestUpdate();
+          }
+        }}
+      >
+        <div class="dialog sticky">
+          <div class="dialog-head">
+            <h3>
+              ${draft.id
+                ? t(this.hass, "config_panel.covers_dialog_edit", { name: draft.name })
+                : t(this.hass, "config_panel.covers_dialog_new")}
+            </h3>
           </div>
+          <div class="dialog-scroll">
+            ${this._error ? html`<p class="error">${this._error}</p>` : nothing}
 
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_area")}</label>
-              <input
-                type="text"
-                list="ac-areas-list"
-                .value=${draft.area_id ?? ""}
-                @input=${(e: Event) =>
-                  this._patchDraft({
-                    area_id: (e.target as HTMLInputElement).value || null,
-                  })}
-              />
-            </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_azimuth")}</label>
-              <input
-                type="number"
-                min="0"
-                max="359"
-                .value=${draft.azimuth == null ? "" : String(draft.azimuth)}
-                @input=${(e: Event) => {
-                  const raw = (e.target as HTMLInputElement).value;
-                  this._patchDraft({ azimuth: raw === "" ? null : Number(raw) });
-                }}
-              />
-            </div>
-          </div>
-          <div class="chips" style="margin-bottom:12px">
-            ${COMPASS.map(
-              ([label, deg]) => html`
-                <button
-                  type="button"
-                  class="chip ${draft.azimuth === deg ? "selected" : ""}"
-                  @click=${() => this._patchDraft({ azimuth: deg })}
+            ${renderEntityDatalist(this.hass, "ac-covers-list", ["cover"])}
+            ${renderEntityDatalist(this.hass, "ac-contacts-list", [
+              "binary_sensor",
+              "sensor",
+            ])}
+            ${renderEntityDatalist(this.hass, "ac-scripts-list", ["script"])}
+            <datalist id="ac-areas-list">
+              ${areas.map((a) => html`<option value=${a.area_id}>${a.name}</option>`)}
+            </datalist>
+
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_name")}</label
                 >
-                  ${label}
-                </button>
-              `
-            )}
-          </div>
-
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_entity")}</label>
-              <input
-                type="text"
-                list="ac-covers-list"
-                .value=${draft.cover_entity_id}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e: Event) =>
-                  this._patchDraft({
-                    cover_entity_id: (e.target as HTMLInputElement).value,
-                  })}
-                @change=${() => this._probe()}
-              />
+                <input
+                  type="text"
+                  .value=${draft.name}
+                  @input=${(e: Event) =>
+                    this._patchDraft({ name: (e.target as HTMLInputElement).value })}
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_kind")}</label
+                >
+                <select
+                  .value=${draft.kind}
+                  @change=${(e: Event) =>
+                    this._patchDraft({ kind: (e.target as HTMLSelectElement).value })}
+                >
+                  ${KINDS.map(
+                    (k) => html`<option value=${k} ?selected=${k === draft.kind}>
+                      ${t(this.hass, `config_panel.kind_${k}`)}
+                    </option>`
+                  )}
+                </select>
+              </div>
             </div>
-          </div>
-          ${caps
-            ? html`
-                <div class="chips caps-chips">
+
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_entity")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-covers-list"
+                  .value=${draft.cover_entity_id}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e: Event) =>
+                    this._patchDraft({
+                      cover_entity_id: (e.target as HTMLInputElement).value,
+                    })}
+                  @change=${() => this._probe()}
+                />
+              </div>
+            </div>
+            ${caps
+              ? html`<div class="chips caps-chips" style="margin-bottom:12px">
                   <span class="chip readonly">
-                    ${caps.supports_position ? "✓" : "✕"}
+                    <ha-icon
+                      icon=${caps.supports_position
+                        ? "mdi:check-circle"
+                        : "mdi:minus-circle-outline"}
+                    ></ha-icon>
                     ${t(this.hass, "config_panel.covers_cap_position")}
                   </span>
                   <span class="chip readonly">
-                    ${caps.supports_tilt ? "✓" : "✕"}
+                    <ha-icon
+                      icon=${caps.supports_tilt
+                        ? "mdi:check-circle"
+                        : "mdi:minus-circle-outline"}
+                    ></ha-icon>
                     ${t(this.hass, "config_panel.covers_cap_tilt")}
                   </span>
                   ${!caps.available
                     ? html`<span class="chip readonly">
-                        ⚠ ${t(this.hass, "config_panel.covers_cap_unavailable")}
+                        <ha-icon icon="mdi:alert-outline"></ha-icon>
+                        ${t(this.hass, "config_panel.covers_cap_unavailable")}
                       </span>`
                     : nothing}
-                </div>
-              `
-            : nothing}
+                </div>`
+              : nothing}
 
-          <div class="section-title">
-            ${t(this.hass, "config_panel.covers_low_mode_title")}
-          </div>
-          <p class="section-desc">
-            ${t(this.hass, "config_panel.covers_low_mode_desc")}
-          </p>
-          ${renderHelp(this.hass, "low_mode")}
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_low_entity")}</label>
-              <input
-                type="text"
-                list="ac-covers-list"
-                .value=${draft.low_mode_entity_id ?? ""}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e: Event) =>
-                  this._patchDraft({
-                    low_mode_entity_id:
-                      (e.target as HTMLInputElement).value || null,
-                  })}
-              />
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_area")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-areas-list"
+                  .value=${draft.area_id ?? ""}
+                  @input=${(e: Event) =>
+                    this._patchDraft({
+                      area_id: (e.target as HTMLInputElement).value || null,
+                    })}
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_azimuth")}</label
+                >
+                <input
+                  type="number"
+                  min="0"
+                  max="359"
+                  .value=${draft.azimuth == null ? "" : String(draft.azimuth)}
+                  @input=${(e: Event) => {
+                    const raw = (e.target as HTMLInputElement).value;
+                    this._patchDraft({ azimuth: raw === "" ? null : Number(raw) });
+                  }}
+                />
+              </div>
             </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_low_script")}</label>
-              <input
-                type="text"
-                list="ac-scripts-list"
-                .value=${draft.low_mode_script_id ?? ""}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e: Event) =>
-                  this._patchDraft({
-                    low_mode_script_id:
-                      (e.target as HTMLInputElement).value || null,
-                  })}
-              />
-            </div>
-          </div>
+            ${renderCompass(draft.azimuth, (deg) => this._patchDraft({ azimuth: deg }))}
+            <p class="section-desc">${t(this.hass, "config_panel.covers_azimuth_hint")}</p>
 
-          ${!isAwning
-            ? html`
-                <div class="section-title">
-                  ${t(this.hass, "config_panel.covers_contact_title")}
-                </div>
-                <p class="section-desc">
-                  ${t(this.hass, "config_panel.covers_contact_desc")}
-                </p>
-                <div class="row">
-                  <div class="grow">
-                    <label class="field-label">${t(this.hass, "config_panel.covers_field_contact")}</label>
-                    <input
-                      type="text"
-                      list="ac-contacts-list"
-                      .value=${draft.contact_entity_id ?? ""}
-                      spellcheck="false"
-                      autocomplete="off"
-                      @input=${(e: Event) =>
-                        this._patchDraft({
-                          contact_entity_id:
-                            (e.target as HTMLInputElement).value || null,
-                        })}
-                      @change=${() => this._probe()}
-                    />
+            <div class="section-title">
+              ${t(this.hass, "config_panel.covers_low_mode_title")}
+            </div>
+            <p class="section-desc">${t(this.hass, "config_panel.covers_low_mode_desc")}</p>
+            ${renderHelp(this.hass, "low_mode")}
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_low_entity")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-covers-list"
+                  .value=${draft.low_mode_entity_id ?? ""}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e: Event) =>
+                    this._patchDraft({
+                      low_mode_entity_id: (e.target as HTMLInputElement).value || null,
+                    })}
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_low_script")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-scripts-list"
+                  .value=${draft.low_mode_script_id ?? ""}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e: Event) =>
+                    this._patchDraft({
+                      low_mode_script_id: (e.target as HTMLInputElement).value || null,
+                    })}
+                />
+              </div>
+            </div>
+
+            ${!isAwning
+              ? html`
+                  <div class="section-title">
+                    ${t(this.hass, "config_panel.covers_contact_title")}
                   </div>
-                </div>
-                ${draft.contact_entity_id
-                  ? html`
-                      ${this._renderContactMapEditor(draft)}
-                      <div class="section-title">
-                        ${t(this.hass, "config_panel.covers_safety_title")}
-                      </div>
-                      <p class="section-desc">
-                        ${t(this.hass, "config_panel.covers_safety_desc")}
-                      </p>
-                      ${renderHelp(this.hass, "safety")}
-                      <div class="row">
-                        <div class="grow">
-                          <label class="field-label">${t(this.hass, "config_panel.covers_field_ventilation")}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            .value=${String(draft.safety.ventilation_position)}
-                            @input=${(e: Event) =>
-                              this._patchDraft({
-                                safety: {
-                                  ...draft.safety,
-                                  ventilation_position: Number(
-                                    (e.target as HTMLInputElement).value
-                                  ),
-                                },
-                              })}
-                          />
+                  <p class="section-desc">
+                    ${t(this.hass, "config_panel.covers_contact_desc")}
+                  </p>
+                  <div class="row">
+                    <div class="grow">
+                      <label class="field-label"
+                        >${t(this.hass, "config_panel.covers_field_contact")}</label
+                      >
+                      <input
+                        type="text"
+                        list="ac-contacts-list"
+                        .value=${draft.contact_entity_id ?? ""}
+                        spellcheck="false"
+                        autocomplete="off"
+                        @input=${(e: Event) =>
+                          this._patchDraft({
+                            contact_entity_id:
+                              (e.target as HTMLInputElement).value || null,
+                          })}
+                        @change=${() => this._probe()}
+                      />
+                    </div>
+                  </div>
+                  ${draft.contact_entity_id
+                    ? html`
+                        ${this._renderContactMapEditor(draft)}
+                        <div class="section-title">
+                          ${t(this.hass, "config_panel.covers_safety_title")}
                         </div>
-                        <div class="grow">
-                          <label class="field-label">${t(this.hass, "config_panel.covers_field_safety_mode")}</label>
-                          <select
-                            .value=${draft.safety.mode}
+                        <p class="section-desc">
+                          ${t(this.hass, "config_panel.covers_safety_desc")}
+                        </p>
+                        ${renderHelp(this.hass, "safety")}
+                        <div class="row">
+                          <div class="grow">
+                            <label class="field-label"
+                              >${t(
+                                this.hass,
+                                "config_panel.covers_field_ventilation"
+                              )}</label
+                            >
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              .value=${String(draft.safety.ventilation_position)}
+                              @input=${(e: Event) =>
+                                this._patchDraft({
+                                  safety: {
+                                    ...draft.safety,
+                                    ventilation_position: Number(
+                                      (e.target as HTMLInputElement).value
+                                    ),
+                                  },
+                                })}
+                            />
+                          </div>
+                          <div class="grow">
+                            <label class="field-label"
+                              >${t(
+                                this.hass,
+                                "config_panel.covers_field_safety_mode"
+                              )}</label
+                            >
+                            <select
+                              .value=${draft.safety.mode}
+                              @change=${(e: Event) =>
+                                this._patchDraft({
+                                  safety: {
+                                    ...draft.safety,
+                                    mode: (e.target as HTMLSelectElement).value as
+                                      | "block"
+                                      | "clamp",
+                                  },
+                                })}
+                            >
+                              <option
+                                value="block"
+                                ?selected=${draft.safety.mode === "block"}
+                              >
+                                ${t(this.hass, "config_panel.covers_safety_block")}
+                              </option>
+                              <option
+                                value="clamp"
+                                ?selected=${draft.safety.mode === "clamp"}
+                              >
+                                ${t(this.hass, "config_panel.covers_safety_clamp")}
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+                        <label class="checkbox-row">
+                          <input
+                            type="checkbox"
+                            .checked=${draft.safety.block_when_tilted}
                             @change=${(e: Event) =>
                               this._patchDraft({
                                 safety: {
                                   ...draft.safety,
-                                  mode: (e.target as HTMLSelectElement).value as
-                                    | "block"
-                                    | "clamp",
+                                  block_when_tilted: (e.target as HTMLInputElement)
+                                    .checked,
                                 },
                               })}
-                          >
-                            <option value="block" ?selected=${draft.safety.mode === "block"}>
-                              ${t(this.hass, "config_panel.covers_safety_block")}
-                            </option>
-                            <option value="clamp" ?selected=${draft.safety.mode === "clamp"}>
-                              ${t(this.hass, "config_panel.covers_safety_clamp")}
-                            </option>
-                          </select>
-                        </div>
-                      </div>
-                      <label class="checkbox-row">
-                        <input
-                          type="checkbox"
-                          .checked=${draft.safety.block_when_tilted}
-                          @change=${(e: Event) =>
-                            this._patchDraft({
-                              safety: {
-                                ...draft.safety,
-                                block_when_tilted: (e.target as HTMLInputElement)
-                                  .checked,
-                              },
-                            })}
-                        />
-                        ${t(this.hass, "config_panel.covers_safety_tilted")}
-                      </label>
-                    `
-                  : nothing}
-              `
-            : nothing}
-
-          <div class="dialog-actions">
+                          />
+                          ${t(this.hass, "config_panel.covers_safety_tilted")}
+                        </label>
+                      `
+                    : nothing}
+                `
+              : nothing}
+          </div>
+          <div class="dialog-foot">
             <button
               class="btn-outline"
               @click=${() => {
@@ -764,35 +1200,42 @@ export class ViewCovers extends LitElement {
   protected render() {
     const snap = this.snapshot;
     if (!snap) return nothing;
+    const filtered = this._filteredCovers();
     return html`
       <ha-card>
         <div class="card-header">
           <ha-icon icon="mdi:window-shutter-cog"></ha-icon>
           ${t(this.hass, "config_panel.covers_title")}
+          <span class="muted" style="font-weight:400">${snap.covers.length}</span>
           <span class="header-actions">
             <button class="btn" @click=${this._openAdd}>
-              ＋ ${t(this.hass, "config_panel.covers_add")}
+              ${t(this.hass, "config_panel.covers_add")}
             </button>
           </span>
         </div>
         <div class="card-content">
           <p class="intro">${t(this.hass, "config_panel.covers_intro")}</p>
+          ${snap.covers.length > 6
+            ? html`<div class="toolbar">
+                <div class="search">
+                  <ha-icon icon="mdi:magnify"></ha-icon>
+                  <input
+                    type="text"
+                    placeholder=${t(this.hass, "config_panel.covers_search_placeholder")}
+                    .value=${this._search}
+                    @input=${(e: Event) => {
+                      this._search = (e.target as HTMLInputElement).value;
+                      this.requestUpdate();
+                    }}
+                  />
+                </div>
+              </div>`
+            : nothing}
           ${this._error && !this._draft
             ? html`<p class="error">${this._error}</p>`
             : nothing}
           ${snap.covers.length
-            ? this._groupByArea(snap.covers).map((group) =>
-                group.label
-                  ? html`
-                      <div class="section-title">
-                        <ha-icon icon="mdi:floor-plan"></ha-icon>
-                        ${group.label}
-                        <span class="muted">${group.covers.length}</span>
-                      </div>
-                      ${group.covers.map((c) => this._renderRow(c))}
-                    `
-                  : group.covers.map((c) => this._renderRow(c))
-              )
+            ? this._groupByArea(filtered).map((g) => this._renderGroup(g))
             : html`<div class="empty-state">
                 <ha-icon icon="mdi:window-shutter-alert"></ha-icon>
                 <p>${t(this.hass, "config_panel.covers_empty")}</p>
