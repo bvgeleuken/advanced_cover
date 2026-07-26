@@ -152,6 +152,7 @@ def _assignment_preflight(
     scenario: Scenario,
     cover: CoverItem | None,
     run: dict[str, Any],
+    *,
     now_iso: str,
 ) -> dict[str, Any]:
     """Preflight for one cover run: extra conditions + safety + availability."""
@@ -208,7 +209,7 @@ def _enrich_occurrence(
     would_run = 0
     for run in occ_dict.get("assignments", []):
         cover = data.covers.get(run["cover_item_id"])
-        pf = _assignment_preflight(hass, data, scenario, cover, run, now_iso)
+        pf = _assignment_preflight(hass, data, scenario, cover, run, now_iso=now_iso)
         run["preflight"] = pf
         if (
             block_pf["verdict"] == VERDICT_WOULD_RUN
