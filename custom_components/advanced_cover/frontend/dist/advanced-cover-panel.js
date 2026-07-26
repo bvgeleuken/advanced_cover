@@ -261,7 +261,9 @@ const panelStyles = i$3 `
   }
   .view-inner {
     width: 100%;
-    max-width: 920px;
+    max-width: 1100px;
+    container-type: inline-size;
+    container-name: acview;
   }
   .entry-picker {
     padding: 24px;
@@ -351,7 +353,7 @@ const sharedStyles = i$3 `
     margin: 6px 0 18px;
   }
 
-  /* Expandable inline help (ⓘ) */
+  /* Expandable inline help (info icon) */
   details.inline-help {
     margin: 6px 0 10px;
     font-size: 0.82rem;
@@ -374,16 +376,9 @@ const sharedStyles = i$3 `
     color: var(--primary-color);
   }
   details.inline-help .inline-help-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    font-size: 0.72rem;
-    line-height: 1;
-    border: 1px solid currentColor;
+    --mdc-icon-size: 16px;
     flex-shrink: 0;
+    color: currentColor;
   }
   details.inline-help p {
     margin: 8px 0 4px;
@@ -793,6 +788,267 @@ const sharedStyles = i$3 `
     color: var(--secondary-text-color);
     font-weight: 500;
   }
+
+  /* ---- Redesign v0.3 shared components ------------------------------- */
+
+  /* Removable chip: icon sits at the chip's baseline, dimmed until hover. */
+  .chip.chip-removable ha-icon {
+    --mdc-icon-size: 15px;
+    opacity: 0.7;
+    vertical-align: -2px;
+  }
+
+  /* Preflight badge (would run / would skip / cannot evaluate). */
+  .preflight-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .preflight-badge ha-icon {
+    --mdc-icon-size: 15px;
+  }
+  .preflight-badge.would_run {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+  }
+  .preflight-badge.would_skip {
+    color: var(--warning-color, #f0b23a);
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 12%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--warning-color, #f0b23a) 45%,
+      transparent
+    );
+  }
+  .preflight-badge.unknown {
+    color: var(--secondary-text-color);
+    background: color-mix(in srgb, var(--secondary-text-color) 12%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--secondary-text-color) 40%,
+      transparent
+    );
+  }
+
+  /* Condition checklist line (preflight detail). */
+  .cond-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    padding: 3px 0;
+    color: var(--secondary-text-color);
+  }
+  .cond-check ha-icon {
+    --mdc-icon-size: 17px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .cond-check.ok ha-icon {
+    color: var(--success-color, #43a047);
+  }
+  .cond-check.fail {
+    color: var(--primary-text-color);
+  }
+  .cond-check.fail ha-icon {
+    color: var(--warning-color, #f0b23a);
+  }
+  .cond-check.na ha-icon {
+    color: var(--disabled-text-color, #6d7476);
+  }
+  .cond-check .cond-actual {
+    color: var(--primary-text-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Segmented icon button group (open · stop · close, filters). */
+  .icon-group {
+    display: inline-flex;
+    border: 1px solid var(--divider-color);
+    border-radius: 9px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .icon-group button {
+    font: inherit;
+    border: none;
+    background: transparent;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 34px;
+    padding: 0 6px;
+    border-left: 1px solid var(--divider-color);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .icon-group button:first-child {
+    border-left: none;
+  }
+  .icon-group button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    color: var(--primary-color);
+  }
+  .icon-group button.selected {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
+  .icon-group button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .icon-group ha-icon {
+    --mdc-icon-size: 20px;
+  }
+
+  /* Compact list row: fixed height, single line, expandable. */
+  .compact-row {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--divider-color);
+    border-radius: 10px;
+    background: var(--card-background-color);
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: border-color 0.12s ease;
+  }
+  .compact-row:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--divider-color));
+  }
+  .compact-row .accent {
+    width: 3px;
+    flex-shrink: 0;
+    background: var(--primary-color);
+  }
+  .compact-row .accent.inactive {
+    background: var(--disabled-text-color, #6d7476);
+  }
+  .compact-row .accent.danger {
+    background: var(--error-color, #d93025);
+  }
+
+  /* Icon-only button with a guaranteed hit area + focus ring. */
+  .iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .iconbtn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    color: var(--primary-color);
+  }
+  .iconbtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .iconbtn.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error-color) 14%, transparent);
+    color: var(--error-color);
+  }
+  .iconbtn ha-icon {
+    --mdc-icon-size: 22px;
+  }
+  .iconbtn:focus-visible,
+  .icon-group button:focus-visible,
+  .chip:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+  }
+
+  /* Meta line with inline mdi icons (room, azimuth, contact, next action). */
+  .meta-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 0.8rem;
+    color: var(--secondary-text-color);
+    min-width: 0;
+  }
+  .meta-line .meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .meta-line ha-icon {
+    --mdc-icon-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Segmented filter control (All / Upcoming / Issues). */
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--divider-color);
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .segmented button {
+    font: inherit;
+    font-size: 0.8rem;
+    border: none;
+    border-left: 1px solid var(--divider-color);
+    background: transparent;
+    color: var(--secondary-text-color);
+    padding: 6px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .segmented button:first-child {
+    border-left: none;
+  }
+  .segmented button.selected {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+  }
+  .segmented .count {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 22%, transparent);
+    color: var(--warning-color, #f0b23a);
+  }
+  .segmented button.selected .count {
+    background: rgba(255, 255, 255, 0.25);
+    color: inherit;
+  }
+
+  /* Truncating text that must never wrap in a data row. */
+  .ellipsis {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
 `;
 
 /** The eight compass points and their azimuth in degrees. */
@@ -819,6 +1075,87 @@ function nearestCompassDeg(azimuth) {
     const a = ((azimuth % 360) + 360) % 360;
     return (Math.round(a / 45) % 8) * 45;
 }
+/**
+ * Compass widget: eight direction buttons arranged in a circle around the
+ * current azimuth value. Spatially readable, with the number field as a
+ * fallback for arbitrary degrees.
+ */
+function renderCompass(azimuth, onSelect) {
+    const r = 62; // radius in px
+    return b `
+    <div class="compass" role="group" aria-label="Azimuth">
+      ${COMPASS.map(([label, deg]) => {
+        // 0° = North at the top; clockwise. Screen y grows downward.
+        const rad = ((deg - 90) * Math.PI) / 180;
+        const x = Math.cos(rad) * r;
+        const y = Math.sin(rad) * r;
+        return b `<button
+          type="button"
+          class="compass-point ${azimuth === deg ? "selected" : ""}"
+          style="transform:translate(calc(-50% + ${x}px), calc(-50% + ${y}px))"
+          @click=${() => onSelect(deg)}
+        >
+          ${label}
+        </button>`;
+    })}
+      <div class="compass-center">
+        ${azimuth == null ? "–" : `${azimuth}°`}
+      </div>
+    </div>
+  `;
+}
+const compassStyles = i$3 `
+  .compass {
+    position: relative;
+    width: 168px;
+    height: 168px;
+    margin: 4px auto 8px;
+  }
+  .compass-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary-text-color);
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid var(--divider-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .compass-point {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--divider-color);
+    background: var(--card-background-color);
+    color: var(--secondary-text-color);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .compass-point:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  .compass-point.selected {
+    background: var(--primary-color);
+    color: var(--text-primary-color, #fff);
+    border-color: var(--primary-color);
+  }
+`;
 
 /** Entity IDs of the given domains, favorites first. */
 function entityIdsForDomains(hass, domains, favorites = []) {
@@ -841,7 +1178,7 @@ function renderEntityDatalist(hass, listId, domains, favorites = []) {
 }
 
 /**
- * Small expandable info block: a subtle "ⓘ" summary that unfolds an
+ * Small expandable info block: a subtle info-icon summary that unfolds an
  * explanation paragraph. Translation keys:
  *   config_panel.help_<key>_title   (short summary label)
  *   config_panel.help_<key>_body    (explanation text)
@@ -850,7 +1187,7 @@ function renderHelp(hass, key) {
     return b `
     <details class="inline-help">
       <summary>
-        <span class="inline-help-icon">ⓘ</span>
+        <ha-icon class="inline-help-icon" icon="mdi:information-outline"></ha-icon>
         ${t(hass, `config_panel.help_${key}_title`)}
       </summary>
       <p>${t(hass, `config_panel.help_${key}_body`)}</p>
@@ -896,6 +1233,8 @@ class ViewCovers extends i {
         this._draft = null;
         this._draftCaps = null;
         this._testPosition = {};
+        this._expanded = new Set();
+        this._search = "";
     }
     static { this.properties = {
         hass: { attribute: false },
@@ -904,32 +1243,244 @@ class ViewCovers extends i {
     }; }
     static { this.styles = [
         sharedStyles,
+        compassStyles,
         i$3 `
-      .cover-badges {
+      .toolbar {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
         flex-wrap: wrap;
-        font-size: 0.82rem;
-        color: var(--secondary-text-color);
+        margin-bottom: 12px;
       }
-      .cover-badges ha-icon {
-        --mdc-icon-size: 17px;
-      }
-      .pos-wrap {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 130px;
-      }
-      .pos-wrap .position-bar {
-        flex: 1;
-      }
-      .test-row {
+      .search {
         display: flex;
         align-items: center;
         gap: 6px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 4px 10px;
+        flex: 1;
+        max-width: 320px;
+      }
+      .search ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .search input {
+        border: none;
+        background: none;
+        padding: 4px 0;
+        width: 100%;
+      }
+      .search input:focus-visible {
+        outline: none;
+      }
+      /* Room group header with collective control. */
+      .group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 18px 0 8px;
+      }
+      .group-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+      .group-title ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .group-title .n {
+        color: var(--secondary-text-color);
+        font-weight: 400;
+      }
+      .group-next {
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+      }
+      .group-head .icon-group {
+        margin-left: auto;
+      }
+      /* Compact row. */
+      .crow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 12px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+      }
+      .crow > ha-switch {
+        flex-shrink: 0;
+      }
+      .kind-icon {
+        --mdc-icon-size: 21px;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .crow-main {
+        min-width: 0;
+        flex: 1 1 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .crow-name {
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .crow-pos {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 150px;
+        flex-shrink: 0;
+      }
+      .crow-pos .position-bar {
+        flex: 1;
+      }
+      .crow-pos .pos-val {
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+        width: 34px;
+        text-align: right;
+      }
+      .crow-next {
+        flex: 1 1 0;
+        min-width: 0;
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .crow-next ha-icon {
+        --mdc-icon-size: 16px;
+        flex-shrink: 0;
+      }
+      .crow-chevron {
+        --mdc-icon-size: 22px;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .link-off {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--error-color, #d93025);
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      .link-off ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      /* Expanded detail. */
+      .crow-detail {
+        padding: 4px 14px 14px 26px;
+        border-top: 1px solid var(--divider-color);
+      }
+      .drive-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         flex-wrap: wrap;
+        margin: 10px 0;
+      }
+      .drive-row .slider {
+        flex: 1;
+        min-width: 160px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .drive-row .slider input[type="range"] {
+        flex: 1;
+      }
+      .safety-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 0.8rem;
+        color: var(--warning-color, #f0b23a);
+        margin: 4px 0;
+      }
+      .safety-note ha-icon {
+        --mdc-icon-size: 16px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .detail-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .today-actions {
+        margin-top: 12px;
+      }
+      .today-actions .ta-title {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .ta-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.82rem;
+        padding: 3px 0;
+      }
+      .ta-row .ta-time {
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .ta-row .ta-name {
+        flex: 1;
+        min-width: 0;
+      }
+      /* Dialog sticky header/footer. */
+      .dialog.sticky {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        max-height: 92vh;
+      }
+      .dialog-head {
+        position: sticky;
+        top: 0;
+        background: var(--card-background-color);
+        padding: 20px 24px 12px;
+        border-bottom: 1px solid var(--divider-color);
+        z-index: 1;
+      }
+      .dialog-head h3 {
+        margin: 0;
+      }
+      .dialog-scroll {
+        overflow-y: auto;
+        padding: 12px 24px;
+      }
+      .dialog-foot {
+        position: sticky;
+        bottom: 0;
+        background: var(--card-background-color);
+        padding: 12px 24px;
+        border-top: 1px solid var(--divider-color);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
       }
       .map-row {
         display: flex;
@@ -941,30 +1492,40 @@ class ViewCovers extends i {
       .map-row select {
         width: auto;
       }
-      .caps-chips {
-        margin: 6px 0 0;
+
+      @container acview (max-width: 900px) {
+        .crow-next {
+          display: none;
+        }
+      }
+      @container acview (max-width: 620px) {
+        .crow .icon-group {
+          display: none;
+        }
+        .crow-pos {
+          width: 96px;
+        }
       }
     `,
     ]; }
     _areaName(areaId) {
         if (!areaId)
-            return "";
+            return t(this.hass, "config_panel.covers_no_area");
         return this.hass.areas?.[areaId]?.name ?? areaId;
     }
-    /**
-     * Group covers by area for display. Groups are sorted by area name; covers
-     * without an area go into a trailing "no area" group. Returns a flat list
-     * when no cover has an area assigned, so the plain list stays unchanged.
-     */
+    _filteredCovers() {
+        const q = this._search.trim().toLowerCase();
+        if (!q)
+            return this.snapshot.covers;
+        return this.snapshot.covers.filter((c) => c.name.toLowerCase().includes(q) ||
+            c.cover_entity_id.toLowerCase().includes(q) ||
+            this._areaName(c.area_id).toLowerCase().includes(q));
+    }
     _groupByArea(covers) {
         const groups = new Map();
         for (const cover of covers) {
             const key = cover.area_id ?? null;
-            const bucket = groups.get(key);
-            if (bucket)
-                bucket.push(cover);
-            else
-                groups.set(key, [cover]);
+            (groups.get(key) ?? groups.set(key, []).get(key)).push(cover);
         }
         if (groups.size === 1 && groups.has(null)) {
             return [{ areaId: null, label: "", covers }];
@@ -981,7 +1542,7 @@ class ViewCovers extends i {
         if (noArea) {
             withArea.push({
                 areaId: null,
-                label: t(this.hass, "config_panel.covers_no_area"),
+                label: this._areaName(null),
                 covers: noArea,
             });
         }
@@ -995,7 +1556,7 @@ class ViewCovers extends i {
         this.requestUpdate();
     }
     _openEdit(cover) {
-        const { capabilities, current_position, contact_state, next_action, missing_entities, ...item } = cover;
+        const { capabilities, current_position, contact_state, safety_blocked, next_action, missing_entities, ...item } = cover;
         this._draft = JSON.parse(JSON.stringify(item));
         this._draftCaps = capabilities;
         this._error = undefined;
@@ -1014,9 +1575,8 @@ class ViewCovers extends i {
             const res = await probeCover(this.hass, this._draft.cover_entity_id, this._draft.contact_entity_id ?? undefined);
             this._draftCaps = res.capabilities;
             const patch = {};
-            if (!this._draft.id) {
+            if (!this._draft.id)
                 patch.kind = res.suggested_kind;
-            }
             if (res.suggested_contact_map &&
                 Object.keys(this._draft.contact_state_map).length === 0) {
                 patch.contact_state_map = res.suggested_contact_map;
@@ -1072,138 +1632,300 @@ class ViewCovers extends i {
             this.requestUpdate();
         }
     }
-    async _test(cover, command) {
+    async _test(coverId, command, position) {
         try {
-            await testCover(this.hass, this.entryId, cover.id, command, command === "position" ? (this._testPosition[cover.id] ?? 50) : undefined);
+            await testCover(this.hass, this.entryId, coverId, command, position);
         }
         catch (e) {
             this._error = formatApiError(e, this.hass);
             this.requestUpdate();
         }
     }
+    async _groupTest(covers, command) {
+        for (const c of covers) {
+            if (!c.missing_entities.length)
+                await this._test(c.id, command);
+        }
+    }
+    _toggleExpand(id) {
+        if (this._expanded.has(id))
+            this._expanded.delete(id);
+        else
+            this._expanded.add(id);
+        this.requestUpdate();
+    }
     // -------------------------------------------------------------- rendering
+    _renderControlGroup(cover) {
+        return b `
+      <div class="icon-group" @click=${(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_open")}
+          aria-label=${t(this.hass, "config_panel.covers_test_open")}
+          @click=${() => this._test(cover.id, "open")}
+        >
+          <ha-icon icon="mdi:arrow-up"></ha-icon>
+        </button>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_stop")}
+          aria-label=${t(this.hass, "config_panel.covers_test_stop")}
+          @click=${() => this._test(cover.id, "stop")}
+        >
+          <ha-icon icon="mdi:stop"></ha-icon>
+        </button>
+        <button
+          type="button"
+          title=${t(this.hass, "config_panel.covers_test_close")}
+          aria-label=${t(this.hass, "config_panel.covers_test_close")}
+          @click=${() => this._test(cover.id, "close")}
+        >
+          <ha-icon icon="mdi:arrow-down"></ha-icon>
+        </button>
+      </div>
+    `;
+    }
     _renderRow(cover) {
+        const expanded = this._expanded.has(cover.id);
+        const missing = cover.missing_entities.length > 0;
+        const na = cover.next_action;
+        const accentClass = missing
+            ? "danger"
+            : cover.enabled
+                ? ""
+                : "inactive";
+        return b `
+      <div class="compact-row ${cover.enabled ? "" : "paused"}">
+        <div class="accent ${accentClass}"></div>
+        <button
+          type="button"
+          class="crow"
+          aria-expanded=${expanded ? "true" : "false"}
+          @click=${() => this._toggleExpand(cover.id)}
+        >
+          <ha-switch
+            .checked=${cover.enabled}
+            title=${t(this.hass, "config_panel.covers_toggle_automation")}
+            @click=${(e) => {
+            e.stopPropagation();
+            this._toggleEnabled(cover);
+        }}
+          ></ha-switch>
+          <ha-icon
+            class="kind-icon"
+            .icon=${KIND_ICONS[cover.kind] ?? KIND_ICONS.other}
+          ></ha-icon>
+          <div class="crow-main">
+            <span class="crow-name ellipsis">${cover.name}</span>
+            <span class="meta-line">
+              ${cover.azimuth != null
+            ? b `<span class="meta"
+                    ><ha-icon icon="mdi:compass-outline"></ha-icon
+                    >${formatAzimuth(cover.azimuth)}</span
+                  >`
+            : A}
+              ${cover.contact_state
+            ? b `<span class="meta"
+                    ><ha-icon
+                      .icon=${CONTACT_ICONS[cover.contact_state] ??
+                CONTACT_ICONS.unknown}
+                    ></ha-icon
+                    >${t(this.hass, `config_panel.contact_${cover.contact_state}`)}</span
+                  >`
+            : A}
+              ${cover.safety_blocked
+            ? b `<span class="meta" style="color:var(--error-color)"
+                    ><ha-icon icon="mdi:shield-alert-outline"></ha-icon>Safety</span
+                  >`
+            : A}
+              ${cover.kind === "awning"
+            ? b `<span class="meta"
+                    >${t(this.hass, "config_panel.covers_awning_extended")}</span
+                  >`
+            : A}
+            </span>
+          </div>
+          ${cover.current_position != null
+            ? b `<div class="crow-pos">
+                <div class="position-bar">
+                  <div
+                    class="position-bar-fill"
+                    style="width:${cover.current_position}%"
+                  ></div>
+                </div>
+                <span class="pos-val">${cover.current_position}%</span>
+              </div>`
+            : b `<div class="crow-pos"></div>`}
+          <div class="crow-next">
+            ${na
+            ? b `<ha-icon
+                    icon=${na.armed ? "mdi:timer-sand" : "mdi:arrow-right-thin"}
+                  ></ha-icon>
+                  <span class="ellipsis"
+                    >${formatTime(na.when)} · ${na.position}% ${na.scenario_name}</span
+                  >`
+            : b `<span class="ellipsis"
+                  >${t(this.hass, "config_panel.covers_no_action_today")}</span
+                >`}
+          </div>
+          ${missing
+            ? b `<span class="link-off"
+                ><ha-icon icon="mdi:link-variant-off"></ha-icon
+                >${t(this.hass, "config_panel.covers_link_missing")}</span
+              >`
+            : this._renderControlGroup(cover)}
+          <ha-icon
+            class="crow-chevron"
+            icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+          ></ha-icon>
+        </button>
+        ${expanded ? this._renderDetail(cover) : A}
+      </div>
+    `;
+    }
+    _renderDetail(cover) {
         const planRuns = this.snapshot.plan.flatMap((occ) => occ.assignments
             .filter((r) => r.cover_item_id === cover.id)
             .map((r) => ({ occ, r })));
+        const testPos = this._testPosition[cover.id] ?? cover.current_position ?? 50;
         return b `
-      <div class="list-row-wrap">
-        <div class="list-row-accent ${cover.enabled ? "" : "inactive"}"></div>
-        <div class="list-row">
-          <div class="list-row-toggle" title=${t(this.hass, "config_panel.covers_toggle_automation")}>
-            <ha-switch
-              .checked=${cover.enabled}
-              @click=${() => this._toggleEnabled(cover)}
-            ></ha-switch>
-          </div>
-          <div class="list-main">
-            <p class="list-name">
-              <ha-icon .icon=${KIND_ICONS[cover.kind] ?? KIND_ICONS.other}></ha-icon>
-              ${cover.name}
-            </p>
-            <div class="cover-badges">
-              ${cover.area_id
-            ? b `<span>📍 ${this._areaName(cover.area_id)}</span>`
-            : A}
-              ${cover.azimuth != null
-            ? b `<span>🧭 ${formatAzimuth(cover.azimuth)}</span>`
-            : A}
-              ${cover.contact_state
-            ? b `<span title=${t(this.hass, "config_panel.covers_contact_state")}>
-                    <ha-icon
-                      .icon=${CONTACT_ICONS[cover.contact_state] ?? CONTACT_ICONS.unknown}
-                    ></ha-icon>
-                    ${t(this.hass, `config_panel.contact_${cover.contact_state}`)}
-                  </span>`
-            : A}
-              ${cover.next_action
-            ? b `<span>
-                    ${cover.next_action.armed ? "⏳" : "→"}
-                    ${formatTime(cover.next_action.when)} ·
-                    ${cover.next_action.position}% (${cover.next_action.scenario_name})
-                  </span>`
-            : A}
-              ${cover.missing_entities.length
-            ? b `<span class="badge badge-unavailable"
-                    >${t(this.hass, "config_panel.covers_missing_entities", {
+      <div class="crow-detail">
+        ${cover.missing_entities.length
+            ? b `<p class="warning">
+              ${t(this.hass, "config_panel.covers_missing_entities", {
                 entities: cover.missing_entities.join(", "),
-            })}</span
-                  >`
+            })}
+            </p>`
             : A}
-            </div>
-            ${cover.current_position != null
-            ? b `
-                  <div class="pos-wrap" style="margin-top:8px">
-                    <div class="position-bar">
-                      <div
-                        class="position-bar-fill"
-                        style="width:${cover.current_position}%"
-                      ></div>
-                    </div>
-                    <span class="muted">${cover.current_position}%</span>
-                  </div>
-                `
-            : A}
-          </div>
-          <div class="list-actions">
-            <div class="test-row">
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_open")} @click=${() => this._test(cover, "open")}>▲</button>
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_stop")} @click=${() => this._test(cover, "stop")}>■</button>
-              <button class="btn-icon" title=${t(this.hass, "config_panel.covers_test_close")} @click=${() => this._test(cover, "close")}>▼</button>
-              ${cover.capabilities.supports_position
-            ? b `
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      style="width:64px"
-                      .value=${String(this._testPosition[cover.id] ?? 50)}
-                      @input=${(e) => {
+        ${cover.capabilities.supports_position && !cover.missing_entities.length
+            ? b `<div class="drive-row">
+              <span class="muted">${t(this.hass, "config_panel.covers_test_drive")}</span>
+              <div class="slider">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  .value=${String(testPos)}
+                  @input=${(e) => {
                 this._testPosition = {
                     ...this._testPosition,
                     [cover.id]: Number(e.target.value),
                 };
+                this.requestUpdate();
             }}
-                    />
-                    <button class="btn-icon" @click=${() => this._test(cover, "position")}>
-                      %
-                    </button>
-                  `
+                />
+                <span class="pos-val">${testPos}%</span>
+              </div>
+              <button
+                type="button"
+                class="iconbtn"
+                title=${t(this.hass, "config_panel.covers_go_position")}
+                aria-label=${t(this.hass, "config_panel.covers_go_position")}
+                @click=${() => this._test(cover.id, "position", testPos)}
+              >
+                <ha-icon icon="mdi:target"></ha-icon>
+              </button>
+            </div>`
             : A}
-            </div>
-            <button class="btn-outline" @click=${() => this._openEdit(cover)}>
-              ${t(this.hass, "config_panel.covers_edit")}
-            </button>
-            <button class="btn-danger" @click=${() => this._delete(cover)}>
-              ${t(this.hass, "config_panel.covers_delete")}
-            </button>
+        ${cover.safety_blocked
+            ? b `<div class="safety-note">
+              <ha-icon icon="mdi:shield-alert-outline"></ha-icon>
+              <span
+                >${t(this.hass, "config_panel.cond_sum_safety", {
+                ventilation: cover.safety.ventilation_position,
+            })}</span
+              >
+            </div>`
+            : A}
+        <div class="today-actions">
+          <div class="ta-title">
+            ${t(this.hass, "config_panel.covers_today_actions", {
+            n: planRuns.length,
+        })}
           </div>
-          <details class="expand" style="flex-basis:100%">
-            <summary>${t(this.hass, "config_panel.covers_today_summary")}</summary>
-            ${planRuns.length
-            ? b `
-                  <table class="plain">
-                    ${planRuns.map(({ occ, r }) => b `
-                        <tr>
-                          <td>${formatTime(occ.planned_at)}</td>
-                          <td>${occ.scenario_name}</td>
-                          <td>${r.target_position}%</td>
-                          <td>
-                            <span class="badge badge-${occ.fired ? (r.status === "done" ? (r.result ?? "skipped") : r.status) : "planned"}">
-                              ${t(this.hass, `config_panel.status_${occ.fired ? (r.status === "done" ? (r.result ?? "skipped") : r.status) : "planned"}`)}
-                            </span>
-                          </td>
-                          <td class="muted">${r.reason ?? ""}</td>
-                        </tr>
-                      `)}
-                  </table>
-                `
-            : b `<p class="muted">
-                  ${t(this.hass, "config_panel.covers_today_none")}
-                </p>`}
-          </details>
+          ${planRuns.length
+            ? planRuns.map(({ occ, r }) => b `<div class="ta-row">
+                  <span class="ta-time">${formatTime(occ.planned_at)}</span>
+                  <span class="ta-name ellipsis">${occ.scenario_name}</span>
+                  <span class="muted">${r.target_position}%</span>
+                  <span
+                    class="badge badge-${occ.fired
+                ? r.status === "done"
+                    ? (r.result ?? "skipped")
+                    : r.status
+                : r.preflight?.verdict === "would_skip"
+                    ? "armed"
+                    : "planned"}"
+                    >${t(this.hass, `config_panel.status_${occ.fired
+                ? r.status === "done"
+                    ? (r.result ?? "skipped")
+                    : r.status
+                : "planned"}`)}</span
+                  >
+                </div>`)
+            : b `<p class="muted">${t(this.hass, "config_panel.covers_today_none")}</p>`}
+        </div>
+        <div class="detail-actions">
+          <button class="btn-outline" @click=${() => this._openEdit(cover)}>
+            ${t(this.hass, "config_panel.covers_edit")}
+          </button>
+          <button class="btn-danger" @click=${() => this._delete(cover)}>
+            ${t(this.hass, "config_panel.covers_delete")}
+          </button>
         </div>
       </div>
+    `;
+    }
+    _renderGroup(group) {
+        const next = group.covers
+            .map((c) => c.next_action)
+            .filter((n) => n != null)
+            .sort((a, b) => a.when.localeCompare(b.when))[0];
+        return b `
+      ${group.label
+            ? b `<div class="group-head">
+            <span class="group-title">
+              <ha-icon icon="mdi:map-marker-outline"></ha-icon>
+              ${group.label}
+              <span class="n">${group.covers.length}</span>
+            </span>
+            ${next
+                ? b `<span class="group-next"
+                  >${t(this.hass, "config_panel.covers_group_next", {
+                    time: formatTime(next.when),
+                    pos: next.position ?? 0,
+                })}</span
+                >`
+                : A}
+            <div
+              class="icon-group"
+              title=${t(this.hass, "config_panel.covers_group_control")}
+            >
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_open")}
+                @click=${() => this._groupTest(group.covers, "open")}
+              >
+                <ha-icon icon="mdi:arrow-up"></ha-icon>
+              </button>
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_stop")}
+                @click=${() => this._groupTest(group.covers, "stop")}
+              >
+                <ha-icon icon="mdi:stop"></ha-icon>
+              </button>
+              <button
+                type="button"
+                aria-label=${t(this.hass, "config_panel.covers_test_close")}
+                @click=${() => this._groupTest(group.covers, "close")}
+              >
+                <ha-icon icon="mdi:arrow-down"></ha-icon>
+              </button>
+            </div>
+          </div>`
+            : A}
+      ${group.covers.map((c) => this._renderRow(c))}
     `;
     }
     _renderContactMapEditor(draft) {
@@ -1213,9 +1935,7 @@ class ViewCovers extends i {
       <div class="section-title">
         ${t(this.hass, "config_panel.covers_contact_map_title")}
       </div>
-      <p class="section-desc">
-        ${t(this.hass, "config_panel.covers_contact_map_desc")}
-      </p>
+      <p class="section-desc">${t(this.hass, "config_panel.covers_contact_map_desc")}</p>
       ${renderHelp(this.hass, "contact_map")}
       ${entries.map(([raw, meaning]) => b `
           <div class="map-row">
@@ -1232,7 +1952,7 @@ class ViewCovers extends i {
             this._patchDraft({ contact_state_map: map });
         }}
             />
-            <span>→</span>
+            <ha-icon icon="mdi:arrow-right-thin"></ha-icon>
             <select
               .value=${meaning}
               @change=${(e) => this._patchDraft({
@@ -1247,14 +1967,15 @@ class ViewCovers extends i {
                 </option>`)}
             </select>
             <button
-              class="cond-remove"
+              class="iconbtn danger"
+              aria-label=${t(this.hass, "config_panel.cond_remove")}
               @click=${() => {
             const map = { ...draft.contact_state_map };
             delete map[raw];
             this._patchDraft({ contact_state_map: map });
         }}
             >
-              ✕
+              <ha-icon icon="mdi:close"></ha-icon>
             </button>
           </div>
         `)}
@@ -1264,7 +1985,7 @@ class ViewCovers extends i {
             contact_state_map: { ...draft.contact_state_map, "": "closed" },
         })}
       >
-        ＋ ${t(this.hass, "config_panel.covers_contact_map_add")}
+        ${t(this.hass, "config_panel.covers_contact_map_add")}
       </button>
     `;
     }
@@ -1276,252 +1997,280 @@ class ViewCovers extends i {
         const caps = this._draftCaps;
         const isAwning = draft.kind === "awning";
         return b `
-      <div class="dialog-backdrop" @click=${(e) => {
+      <div
+        class="dialog-backdrop"
+        @click=${(e) => {
             if (e.target === e.currentTarget) {
                 this._draft = null;
                 this.requestUpdate();
             }
-        }}>
-        <div class="dialog">
-          <h3>
-            ${draft.id
+        }}
+      >
+        <div class="dialog sticky">
+          <div class="dialog-head">
+            <h3>
+              ${draft.id
             ? t(this.hass, "config_panel.covers_dialog_edit", { name: draft.name })
             : t(this.hass, "config_panel.covers_dialog_new")}
-          </h3>
-          ${this._error ? b `<p class="error">${this._error}</p>` : A}
+            </h3>
+          </div>
+          <div class="dialog-scroll">
+            ${this._error ? b `<p class="error">${this._error}</p>` : A}
 
-          ${renderEntityDatalist(this.hass, "ac-covers-list", ["cover"])}
-          ${renderEntityDatalist(this.hass, "ac-contacts-list", [
+            ${renderEntityDatalist(this.hass, "ac-covers-list", ["cover"])}
+            ${renderEntityDatalist(this.hass, "ac-contacts-list", [
             "binary_sensor",
             "sensor",
         ])}
-          ${renderEntityDatalist(this.hass, "ac-scripts-list", ["script"])}
-          <datalist id="ac-areas-list">
-            ${areas.map((a) => b `<option value=${a.area_id}>${a.name}</option>`)}
-          </datalist>
+            ${renderEntityDatalist(this.hass, "ac-scripts-list", ["script"])}
+            <datalist id="ac-areas-list">
+              ${areas.map((a) => b `<option value=${a.area_id}>${a.name}</option>`)}
+            </datalist>
 
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_name")}</label>
-              <input
-                type="text"
-                .value=${draft.name}
-                @input=${(e) => this._patchDraft({ name: e.target.value })}
-              />
-            </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_kind")}</label>
-              <select
-                .value=${draft.kind}
-                @change=${(e) => this._patchDraft({ kind: e.target.value })}
-              >
-                ${KINDS.map((k) => b `<option value=${k} ?selected=${k === draft.kind}>
-                    ${t(this.hass, `config_panel.kind_${k}`)}
-                  </option>`)}
-              </select>
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_area")}</label>
-              <input
-                type="text"
-                list="ac-areas-list"
-                .value=${draft.area_id ?? ""}
-                @input=${(e) => this._patchDraft({
-            area_id: e.target.value || null,
-        })}
-              />
-            </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_azimuth")}</label>
-              <input
-                type="number"
-                min="0"
-                max="359"
-                .value=${draft.azimuth == null ? "" : String(draft.azimuth)}
-                @input=${(e) => {
-            const raw = e.target.value;
-            this._patchDraft({ azimuth: raw === "" ? null : Number(raw) });
-        }}
-              />
-            </div>
-          </div>
-          <div class="chips" style="margin-bottom:12px">
-            ${COMPASS.map(([label, deg]) => b `
-                <button
-                  type="button"
-                  class="chip ${draft.azimuth === deg ? "selected" : ""}"
-                  @click=${() => this._patchDraft({ azimuth: deg })}
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_name")}</label
                 >
-                  ${label}
-                </button>
-              `)}
-          </div>
+                <input
+                  type="text"
+                  .value=${draft.name}
+                  @input=${(e) => this._patchDraft({ name: e.target.value })}
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_kind")}</label
+                >
+                <select
+                  .value=${draft.kind}
+                  @change=${(e) => this._patchDraft({ kind: e.target.value })}
+                >
+                  ${KINDS.map((k) => b `<option value=${k} ?selected=${k === draft.kind}>
+                      ${t(this.hass, `config_panel.kind_${k}`)}
+                    </option>`)}
+                </select>
+              </div>
+            </div>
 
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_entity")}</label>
-              <input
-                type="text"
-                list="ac-covers-list"
-                .value=${draft.cover_entity_id}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e) => this._patchDraft({
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_entity")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-covers-list"
+                  .value=${draft.cover_entity_id}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e) => this._patchDraft({
             cover_entity_id: e.target.value,
         })}
-                @change=${() => this._probe()}
-              />
+                  @change=${() => this._probe()}
+                />
+              </div>
             </div>
-          </div>
-          ${caps
-            ? b `
-                <div class="chips caps-chips">
+            ${caps
+            ? b `<div class="chips caps-chips" style="margin-bottom:12px">
                   <span class="chip readonly">
-                    ${caps.supports_position ? "✓" : "✕"}
+                    <ha-icon
+                      icon=${caps.supports_position
+                ? "mdi:check-circle"
+                : "mdi:minus-circle-outline"}
+                    ></ha-icon>
                     ${t(this.hass, "config_panel.covers_cap_position")}
                   </span>
                   <span class="chip readonly">
-                    ${caps.supports_tilt ? "✓" : "✕"}
+                    <ha-icon
+                      icon=${caps.supports_tilt
+                ? "mdi:check-circle"
+                : "mdi:minus-circle-outline"}
+                    ></ha-icon>
                     ${t(this.hass, "config_panel.covers_cap_tilt")}
                   </span>
                   ${!caps.available
                 ? b `<span class="chip readonly">
-                        ⚠ ${t(this.hass, "config_panel.covers_cap_unavailable")}
+                        <ha-icon icon="mdi:alert-outline"></ha-icon>
+                        ${t(this.hass, "config_panel.covers_cap_unavailable")}
                       </span>`
                 : A}
-                </div>
-              `
+                </div>`
             : A}
 
-          <div class="section-title">
-            ${t(this.hass, "config_panel.covers_low_mode_title")}
-          </div>
-          <p class="section-desc">
-            ${t(this.hass, "config_panel.covers_low_mode_desc")}
-          </p>
-          ${renderHelp(this.hass, "low_mode")}
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_low_entity")}</label>
-              <input
-                type="text"
-                list="ac-covers-list"
-                .value=${draft.low_mode_entity_id ?? ""}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e) => this._patchDraft({
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_area")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-areas-list"
+                  .value=${draft.area_id ?? ""}
+                  @input=${(e) => this._patchDraft({
+            area_id: e.target.value || null,
+        })}
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_azimuth")}</label
+                >
+                <input
+                  type="number"
+                  min="0"
+                  max="359"
+                  .value=${draft.azimuth == null ? "" : String(draft.azimuth)}
+                  @input=${(e) => {
+            const raw = e.target.value;
+            this._patchDraft({ azimuth: raw === "" ? null : Number(raw) });
+        }}
+                />
+              </div>
+            </div>
+            ${renderCompass(draft.azimuth, (deg) => this._patchDraft({ azimuth: deg }))}
+            <p class="section-desc">${t(this.hass, "config_panel.covers_azimuth_hint")}</p>
+
+            <div class="section-title">
+              ${t(this.hass, "config_panel.covers_low_mode_title")}
+            </div>
+            <p class="section-desc">${t(this.hass, "config_panel.covers_low_mode_desc")}</p>
+            ${renderHelp(this.hass, "low_mode")}
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_low_entity")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-covers-list"
+                  .value=${draft.low_mode_entity_id ?? ""}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e) => this._patchDraft({
             low_mode_entity_id: e.target.value || null,
         })}
-              />
-            </div>
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.covers_field_low_script")}</label>
-              <input
-                type="text"
-                list="ac-scripts-list"
-                .value=${draft.low_mode_script_id ?? ""}
-                spellcheck="false"
-                autocomplete="off"
-                @input=${(e) => this._patchDraft({
+                />
+              </div>
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.covers_field_low_script")}</label
+                >
+                <input
+                  type="text"
+                  list="ac-scripts-list"
+                  .value=${draft.low_mode_script_id ?? ""}
+                  spellcheck="false"
+                  autocomplete="off"
+                  @input=${(e) => this._patchDraft({
             low_mode_script_id: e.target.value || null,
         })}
-              />
+                />
+              </div>
             </div>
-          </div>
 
-          ${!isAwning
+            ${!isAwning
             ? b `
-                <div class="section-title">
-                  ${t(this.hass, "config_panel.covers_contact_title")}
-                </div>
-                <p class="section-desc">
-                  ${t(this.hass, "config_panel.covers_contact_desc")}
-                </p>
-                <div class="row">
-                  <div class="grow">
-                    <label class="field-label">${t(this.hass, "config_panel.covers_field_contact")}</label>
-                    <input
-                      type="text"
-                      list="ac-contacts-list"
-                      .value=${draft.contact_entity_id ?? ""}
-                      spellcheck="false"
-                      autocomplete="off"
-                      @input=${(e) => this._patchDraft({
+                  <div class="section-title">
+                    ${t(this.hass, "config_panel.covers_contact_title")}
+                  </div>
+                  <p class="section-desc">
+                    ${t(this.hass, "config_panel.covers_contact_desc")}
+                  </p>
+                  <div class="row">
+                    <div class="grow">
+                      <label class="field-label"
+                        >${t(this.hass, "config_panel.covers_field_contact")}</label
+                      >
+                      <input
+                        type="text"
+                        list="ac-contacts-list"
+                        .value=${draft.contact_entity_id ?? ""}
+                        spellcheck="false"
+                        autocomplete="off"
+                        @input=${(e) => this._patchDraft({
                 contact_entity_id: e.target.value || null,
             })}
-                      @change=${() => this._probe()}
-                    />
+                        @change=${() => this._probe()}
+                      />
+                    </div>
                   </div>
-                </div>
-                ${draft.contact_entity_id
+                  ${draft.contact_entity_id
                 ? b `
-                      ${this._renderContactMapEditor(draft)}
-                      <div class="section-title">
-                        ${t(this.hass, "config_panel.covers_safety_title")}
-                      </div>
-                      <p class="section-desc">
-                        ${t(this.hass, "config_panel.covers_safety_desc")}
-                      </p>
-                      ${renderHelp(this.hass, "safety")}
-                      <div class="row">
-                        <div class="grow">
-                          <label class="field-label">${t(this.hass, "config_panel.covers_field_ventilation")}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            .value=${String(draft.safety.ventilation_position)}
-                            @input=${(e) => this._patchDraft({
+                        ${this._renderContactMapEditor(draft)}
+                        <div class="section-title">
+                          ${t(this.hass, "config_panel.covers_safety_title")}
+                        </div>
+                        <p class="section-desc">
+                          ${t(this.hass, "config_panel.covers_safety_desc")}
+                        </p>
+                        ${renderHelp(this.hass, "safety")}
+                        <div class="row">
+                          <div class="grow">
+                            <label class="field-label"
+                              >${t(this.hass, "config_panel.covers_field_ventilation")}</label
+                            >
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              .value=${String(draft.safety.ventilation_position)}
+                              @input=${(e) => this._patchDraft({
                     safety: {
                         ...draft.safety,
                         ventilation_position: Number(e.target.value),
                     },
                 })}
-                          />
-                        </div>
-                        <div class="grow">
-                          <label class="field-label">${t(this.hass, "config_panel.covers_field_safety_mode")}</label>
-                          <select
-                            .value=${draft.safety.mode}
-                            @change=${(e) => this._patchDraft({
+                            />
+                          </div>
+                          <div class="grow">
+                            <label class="field-label"
+                              >${t(this.hass, "config_panel.covers_field_safety_mode")}</label
+                            >
+                            <select
+                              .value=${draft.safety.mode}
+                              @change=${(e) => this._patchDraft({
                     safety: {
                         ...draft.safety,
                         mode: e.target.value,
                     },
                 })}
-                          >
-                            <option value="block" ?selected=${draft.safety.mode === "block"}>
-                              ${t(this.hass, "config_panel.covers_safety_block")}
-                            </option>
-                            <option value="clamp" ?selected=${draft.safety.mode === "clamp"}>
-                              ${t(this.hass, "config_panel.covers_safety_clamp")}
-                            </option>
-                          </select>
+                            >
+                              <option
+                                value="block"
+                                ?selected=${draft.safety.mode === "block"}
+                              >
+                                ${t(this.hass, "config_panel.covers_safety_block")}
+                              </option>
+                              <option
+                                value="clamp"
+                                ?selected=${draft.safety.mode === "clamp"}
+                              >
+                                ${t(this.hass, "config_panel.covers_safety_clamp")}
+                              </option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
-                      <label class="checkbox-row">
-                        <input
-                          type="checkbox"
-                          .checked=${draft.safety.block_when_tilted}
-                          @change=${(e) => this._patchDraft({
+                        <label class="checkbox-row">
+                          <input
+                            type="checkbox"
+                            .checked=${draft.safety.block_when_tilted}
+                            @change=${(e) => this._patchDraft({
                     safety: {
                         ...draft.safety,
                         block_when_tilted: e.target
                             .checked,
                     },
                 })}
-                        />
-                        ${t(this.hass, "config_panel.covers_safety_tilted")}
-                      </label>
-                    `
+                          />
+                          ${t(this.hass, "config_panel.covers_safety_tilted")}
+                        </label>
+                      `
                 : A}
-              `
+                `
             : A}
-
-          <div class="dialog-actions">
+          </div>
+          <div class="dialog-foot">
             <button
               class="btn-outline"
               @click=${() => {
@@ -1545,33 +2294,42 @@ class ViewCovers extends i {
         const snap = this.snapshot;
         if (!snap)
             return A;
+        const filtered = this._filteredCovers();
         return b `
       <ha-card>
         <div class="card-header">
           <ha-icon icon="mdi:window-shutter-cog"></ha-icon>
           ${t(this.hass, "config_panel.covers_title")}
+          <span class="muted" style="font-weight:400">${snap.covers.length}</span>
           <span class="header-actions">
             <button class="btn" @click=${this._openAdd}>
-              ＋ ${t(this.hass, "config_panel.covers_add")}
+              ${t(this.hass, "config_panel.covers_add")}
             </button>
           </span>
         </div>
         <div class="card-content">
           <p class="intro">${t(this.hass, "config_panel.covers_intro")}</p>
+          ${snap.covers.length > 6
+            ? b `<div class="toolbar">
+                <div class="search">
+                  <ha-icon icon="mdi:magnify"></ha-icon>
+                  <input
+                    type="text"
+                    placeholder=${t(this.hass, "config_panel.covers_search_placeholder")}
+                    .value=${this._search}
+                    @input=${(e) => {
+                this._search = e.target.value;
+                this.requestUpdate();
+            }}
+                  />
+                </div>
+              </div>`
+            : A}
           ${this._error && !this._draft
             ? b `<p class="error">${this._error}</p>`
             : A}
           ${snap.covers.length
-            ? this._groupByArea(snap.covers).map((group) => group.label
-                ? b `
-                      <div class="section-title">
-                        <ha-icon icon="mdi:floor-plan"></ha-icon>
-                        ${group.label}
-                        <span class="muted">${group.covers.length}</span>
-                      </div>
-                      ${group.covers.map((c) => this._renderRow(c))}
-                    `
-                : group.covers.map((c) => this._renderRow(c)))
+            ? this._groupByArea(filtered).map((g) => this._renderGroup(g))
             : b `<div class="empty-state">
                 <ha-icon icon="mdi:window-shutter-alert"></ha-icon>
                 <p>${t(this.hass, "config_panel.covers_empty")}</p>
@@ -1584,11 +2342,23 @@ class ViewCovers extends i {
 }
 defineCustomElementOnce("ac-view-covers", ViewCovers);
 
+/** Map a raw log result to a filter bucket. */
+function bucket(result) {
+    if (result === "executed")
+        return "executed";
+    if (result === "skipped" || result === "expired")
+        return "skipped";
+    if (result === "blocked_safety" || result === "unavailable")
+        return "blocked";
+    return null;
+}
 class ViewLog extends i {
     constructor() {
         super(...arguments);
         this._coverFilter = "";
+        this._resultFilters = new Set();
         this._showRaw = false;
+        this._copied = false;
     }
     static { this.properties = {
         hass: { attribute: false },
@@ -1598,75 +2368,179 @@ class ViewLog extends i {
     static { this.styles = [
         sharedStyles,
         i$3 `
+      .log-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .log-list {
+        display: flex;
+        flex-direction: column;
+      }
+      .log-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 4px;
+        border-bottom: 1px solid var(--divider-color);
+      }
+      .log-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--disabled-text-color, #6d7476);
+      }
+      .log-dot.executed {
+        background: var(--success-color, #43a047);
+      }
+      .log-dot.skipped {
+        background: var(--disabled-text-color, #6d7476);
+      }
+      .log-dot.blocked {
+        background: var(--error-color, #d93025);
+      }
+      .log-time {
+        font-variant-numeric: tabular-nums;
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+        width: 46px;
+      }
+      .log-body {
+        min-width: 0;
+        flex: 1;
+      }
+      .log-line1 {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .log-cover {
+        font-weight: 500;
+        font-size: 0.9rem;
+      }
+      .log-pos {
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .log-line2 {
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        margin-top: 1px;
+      }
+      .raw-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+      }
       pre.raw {
         font-size: 0.75rem;
         overflow-x: auto;
         background: var(--secondary-background-color, rgba(0, 0, 0, 0.04));
         padding: 12px;
         border-radius: 8px;
+        margin: 0;
       }
     `,
     ]; }
+    _counts() {
+        const c = { executed: 0, skipped: 0, blocked: 0 };
+        for (const e of this.snapshot.log) {
+            const b = bucket(e.result);
+            if (b)
+                c[b] += 1;
+        }
+        return c;
+    }
+    _toggleResult(f) {
+        if (this._resultFilters.has(f))
+            this._resultFilters.delete(f);
+        else
+            this._resultFilters.add(f);
+        this.requestUpdate();
+    }
+    _filtered() {
+        return this.snapshot.log.filter((e) => {
+            if (this._coverFilter && e.cover_item_id !== this._coverFilter)
+                return false;
+            if (this._resultFilters.size) {
+                const b = bucket(e.result);
+                if (!b || !this._resultFilters.has(b))
+                    return false;
+            }
+            return true;
+        });
+    }
+    async _copyRaw() {
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(this.snapshot, null, 2));
+            this._copied = true;
+            this.requestUpdate();
+            setTimeout(() => {
+                this._copied = false;
+                this.requestUpdate();
+            }, 1500);
+        }
+        catch {
+            /* clipboard unavailable */
+        }
+    }
+    _renderChip(f, count) {
+        const selected = this._resultFilters.has(f);
+        return b `<button
+      type="button"
+      class="chip ${selected ? "selected" : ""}"
+      @click=${() => this._toggleResult(f)}
+    >
+      ${t(this.hass, `config_panel.log_filter_${f}`)} ${count}
+    </button>`;
+    }
     render() {
         const snap = this.snapshot;
         if (!snap)
             return A;
-        const entries = snap.log.filter((e) => !this._coverFilter || e.cover_item_id === this._coverFilter);
+        const counts = this._counts();
+        const entries = this._filtered();
         return b `
       <ha-card>
         <div class="card-header">
           <ha-icon icon="mdi:history"></ha-icon>
           ${t(this.hass, "config_panel.log_title")}
+          <span class="muted" style="font-weight:400">
+            ${t(this.hass, "config_panel.log_today")} ·
+            ${t(this.hass, "config_panel.log_entries", { n: snap.log.length })}
+          </span>
         </div>
         <div class="card-content">
           <p class="intro">${t(this.hass, "config_panel.log_intro")}</p>
-          <div class="row">
-            <div>
-              <label class="field-label">${t(this.hass, "config_panel.log_filter_cover")}</label>
-              <select
-                style="width:auto"
-                @change=${(e) => {
+          <div class="log-toolbar">
+            <div class="chips">
+              ${this._renderChip("executed", counts.executed)}
+              ${this._renderChip("skipped", counts.skipped)}
+              ${this._renderChip("blocked", counts.blocked)}
+            </div>
+            <select
+              style="width:auto"
+              @change=${(e) => {
             this._coverFilter = e.target.value;
             this.requestUpdate();
         }}
-              >
-                <option value="">${t(this.hass, "config_panel.log_filter_all")}</option>
-                ${snap.covers.map((c) => b `
-                    <option value=${c.id} ?selected=${this._coverFilter === c.id}>
-                      ${c.name}
-                    </option>
-                  `)}
-              </select>
-            </div>
+            >
+              <option value="">${t(this.hass, "config_panel.log_filter_all_covers")}</option>
+              ${snap.covers.map((c) => b `<option value=${c.id} ?selected=${this._coverFilter === c.id}>
+                  ${c.name}
+                </option>`)}
+            </select>
           </div>
           ${entries.length
-            ? b `
-                <table class="plain">
-                  <tr>
-                    <th>${t(this.hass, "config_panel.log_col_time")}</th>
-                    <th>${t(this.hass, "config_panel.log_col_cover")}</th>
-                    <th>${t(this.hass, "config_panel.log_col_scenario")}</th>
-                    <th>${t(this.hass, "config_panel.log_col_result")}</th>
-                    <th>${t(this.hass, "config_panel.log_col_reason")}</th>
-                  </tr>
-                  ${entries.map((e) => b `
-                      <tr>
-                        <td>${formatTime(e.time)}</td>
-                        <td>${e.cover_name}</td>
-                        <td>${e.scenario_name}</td>
-                        <td>
-                          <span class="badge badge-${e.result}">
-                            ${t(this.hass, `config_panel.status_${e.result}`)}
-                          </span>
-                          ${e.position != null
-                ? b `<span class="muted"> ${e.position}%</span>`
-                : A}
-                        </td>
-                        <td class="muted">${e.reason ?? ""}</td>
-                      </tr>
-                    `)}
-                </table>
-              `
+            ? b `<div class="log-list">
+                ${entries.map((e) => this._renderRow(e))}
+              </div>`
             : b `<div class="empty-state">
                 <ha-icon icon="mdi:text-box-outline"></ha-icon>
                 <p>${t(this.hass, "config_panel.log_empty")}</p>
@@ -1680,11 +2554,42 @@ class ViewLog extends i {
           >
             <summary>${t(this.hass, "config_panel.log_show_raw")}</summary>
             ${this._showRaw
-            ? b `<pre class="raw">${JSON.stringify(snap, null, 2)}</pre>`
+            ? b `<div class="raw-head">
+                    <button class="btn-icon" @click=${this._copyRaw}>
+                      <ha-icon
+                        icon=${this._copied ? "mdi:check" : "mdi:content-copy"}
+                        style="--mdc-icon-size:16px;vertical-align:-3px"
+                      ></ha-icon>
+                      ${this._copied
+                ? t(this.hass, "config_panel.log_copied")
+                : t(this.hass, "config_panel.log_copy")}
+                    </button>
+                  </div>
+                  <pre class="raw">${JSON.stringify(snap, null, 2)}</pre>`
             : A}
           </details>
         </div>
       </ha-card>
+    `;
+    }
+    _renderRow(e) {
+        const b$1 = bucket(e.result) ?? "skipped";
+        return b `
+      <div class="log-row">
+        <span class="log-time">${formatTime(e.time)}</span>
+        <span class="log-dot ${b$1}"></span>
+        <div class="log-body">
+          <div class="log-line1">
+            <span class="log-cover">${e.cover_name}</span>
+            ${e.position != null
+            ? b `<span class="log-pos">${e.position}%</span>`
+            : A}
+          </div>
+          <div class="log-line2">
+            ${e.scenario_name}${e.reason ? ` — ${e.reason}` : ""}
+          </div>
+        </div>
+      </div>
     `;
     }
 }
@@ -1746,11 +2651,11 @@ function renderStateChips(opts, index, cond) {
       ${states.map((s) => b `
           <button
             type="button"
-            class="chip selected"
+            class="chip selected chip-removable"
             title=${t(opts.hass, "config_panel.cond_remove_state")}
             @click=${() => update(opts, index, { states: states.filter((x) => x !== s) })}
           >
-            ${s} ✕
+            ${s} <ha-icon icon="mdi:close"></ha-icon>
           </button>
         `)}
     </span>
@@ -1912,7 +2817,7 @@ function renderCondition(opts, cond, index) {
         title=${t(hass, "config_panel.cond_remove")}
         @click=${() => remove(opts, index)}
       >
-        ✕
+        <ha-icon icon="mdi:close"></ha-icon>
       </button>
     </div>
   `;
@@ -1947,7 +2852,7 @@ function renderConditionEditor(opts) {
     }}
         >
           <option value="">
-            ＋ ${t(hass, "config_panel.cond_add")}
+            + ${t(hass, "config_panel.cond_add")}
           </option>
           ${types.map((ct) => b `
               <option value=${ct}>${t(hass, `config_panel.cond_type_${ct}`)}</option>
@@ -1958,15 +2863,110 @@ function renderConditionEditor(opts) {
   `;
 }
 
+const VERDICT_META = {
+    would_run: { icon: "mdi:play-circle-outline", key: "preflight_would_run" },
+    would_skip: { icon: "mdi:debug-step-over", key: "preflight_would_skip" },
+    unknown: { icon: "mdi:help-circle-outline", key: "preflight_unknown" },
+};
+/** Localized one-line summary of one evaluated condition. */
+function condSummary(hass, cond) {
+    const values = { ...cond.summary_values };
+    // The backend sends the raw operator ("above"/"below"/"between"); localize it.
+    if (typeof values.op === "string") {
+        values.op = t(hass, `config_panel.cond_op_${values.op}`);
+    }
+    // Translate the abstract contact states used in expected/actual.
+    for (const field of ["actual", "expected"]) {
+        if (cond.type === "contact" &&
+            typeof values[field] === "string" &&
+            values[field]) {
+            values[field] = String(values[field])
+                .split(", ")
+                .map((s) => t(hass, `config_panel.contact_${s}`))
+                .join(", ");
+        }
+    }
+    return t(hass, cond.summary_key, values);
+}
+/**
+ * The preflight badge ("Would run now" / "Would be skipped now" / "Cannot be
+ * evaluated"). Renders nothing for a scenario without conditions (no noise).
+ */
+function preflightBadge(hass, pf) {
+    if (!pf)
+        return A;
+    if (pf.verdict === "would_run" && pf.conditions.length === 0)
+        return A;
+    const meta = VERDICT_META[pf.verdict];
+    return b `
+    <span
+      class="preflight-badge ${pf.verdict}"
+      title=${t(hass, "config_panel.preflight_evaluated_at", {
+        time: formatTime(pf.evaluated_at),
+    })}
+    >
+      <ha-icon icon=${meta.icon}></ha-icon>
+      ${t(hass, `config_panel.${meta.key}`)}
+    </span>
+  `;
+}
+/** Plain-text reason for a would_skip/unknown verdict ("… and N more"). */
+function preflightReason(hass, pf) {
+    if (!pf)
+        return null;
+    const fails = pf.conditions.filter((c) => c.ok === false);
+    const source = fails.length
+        ? fails
+        : pf.conditions.filter((c) => c.ok === null);
+    if (!source.length)
+        return null;
+    const first = condSummary(hass, source[0]);
+    if (source.length === 1)
+        return first;
+    return `${first} · ${t(hass, "config_panel.preflight_and_more", {
+        n: source.length - 1,
+    })}`;
+}
+const CHECK_META = {
+    ok: { icon: "mdi:check-circle", cls: "ok" },
+    fail: { icon: "mdi:alert-circle-outline", cls: "fail" },
+    na: { icon: "mdi:help-circle-outline", cls: "na" },
+};
+/** Full checklist of a preflight's conditions (shown on expand). */
+function renderCondChecklist(hass, conditions) {
+    return conditions.map((c) => {
+        const meta = c.ok === true ? CHECK_META.ok : c.ok === false ? CHECK_META.fail : CHECK_META.na;
+        return b `
+      <div class="cond-check ${meta.cls}">
+        <ha-icon icon=${meta.icon}></ha-icon>
+        <span>${condSummary(hass, c)}</span>
+      </div>
+    `;
+    });
+}
+
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const RANDOM_WINDOWS = [0, 15, 30, 60];
 const RETRY_WINDOWS = [0, 60, 120, 240, 480];
+const DAYPART_ICONS = {
+    night: "mdi:weather-night",
+    morning: "mdi:weather-sunset-up",
+    forenoon: "mdi:weather-partly-cloudy",
+    noon: "mdi:weather-sunny",
+    afternoon: "mdi:weather-partly-cloudy",
+    evening: "mdi:weather-sunset",
+};
 function emptyScenario() {
     return {
         id: "",
         name: "",
         enabled: true,
-        trigger: { type: "fixed_time", time_local: "07:00", sun_event: "sunset", offset_min: 0 },
+        trigger: {
+            type: "fixed_time",
+            time_local: "07:00",
+            sun_event: "sunset",
+            offset_min: 0,
+        },
         random_window_min: 0,
         random_direction: "both",
         weekdays: [...WEEKDAYS],
@@ -1986,6 +2986,10 @@ class ViewScenarios extends i {
         this._busy = false;
         this._draft = null;
         this._runIgnoreConditions = false;
+        this._dragIndex = null;
+        this._dragOverIndex = null;
+        this._runPopoverId = null;
+        this._menuOpenId = null;
     }
     static { this.properties = {
         hass: { attribute: false },
@@ -1996,44 +3000,92 @@ class ViewScenarios extends i {
     static { this.styles = [
         sharedStyles,
         i$3 `
-      .order-buttons {
+      .srow {
         display: flex;
-        flex-direction: column;
-        gap: 2px;
+        align-items: stretch;
+        border: 1px solid var(--divider-color);
+        border-left: 3px solid var(--primary-color);
+        border-radius: 10px;
+        margin-bottom: 8px;
+        background: var(--card-background-color);
       }
-      .order-buttons button {
-        padding: 2px 8px;
-        line-height: 1;
+      .srow.inactive {
+        border-left-color: var(--disabled-text-color, #6d7476);
       }
-      .daypart {
+      .srow.dragover {
+        box-shadow: 0 -2px 0 0 var(--primary-color);
+      }
+      .drag-handle {
+        display: flex;
+        align-items: center;
+        padding: 0 4px 0 8px;
+        color: var(--secondary-text-color);
+        cursor: grab;
+      }
+      .drag-handle ha-icon {
+        --mdc-icon-size: 20px;
+      }
+      .srow-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px 10px 4px;
+        flex-wrap: wrap;
+      }
+      .srow-main {
+        flex: 1;
+        min-width: 160px;
+      }
+      .srow-name {
         display: flex;
         align-items: center;
         gap: 8px;
+        font-weight: 600;
+        font-size: 1rem;
+      }
+      .srow-name .ellipsis {
+        min-width: 0;
+      }
+      .srow-meta {
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        margin-top: 2px;
+      }
+      .cond-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
         margin-top: 6px;
+      }
+      .cond-chip {
+        font-size: 0.74rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(0, 0, 0, 0.05));
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+      }
+      .srow-daypart {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 210px;
+        flex-shrink: 0;
         font-size: 0.78rem;
         color: var(--secondary-text-color);
       }
-      .daypart-emoji {
-        font-size: 0.95rem;
-        line-height: 1;
-      }
-      .daypart-label {
-        min-width: 5.5em;
+      .srow-daypart ha-icon {
+        --mdc-icon-size: 18px;
       }
       .daybar {
         position: relative;
         flex: 1;
-        max-width: 200px;
         height: 6px;
         border-radius: 3px;
-        background: linear-gradient(
-          90deg,
-          rgba(63, 81, 181, 0.28) 0%,
-          rgba(255, 193, 7, 0.32) 25%,
-          rgba(255, 235, 59, 0.42) 50%,
-          rgba(255, 152, 0, 0.32) 75%,
-          rgba(63, 81, 181, 0.28) 100%
-        );
+        border: 1px solid var(--divider-color);
+        box-sizing: border-box;
       }
       .daybar-marker {
         position: absolute;
@@ -2044,7 +3096,98 @@ class ViewScenarios extends i {
         border-radius: 50%;
         background: var(--primary-color);
         border: 1.5px solid var(--card-background-color);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+      }
+      .srow-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        position: relative;
+      }
+      .warn-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--warning-color, #f0b23a);
+        font-size: 0.8rem;
+        margin-top: 4px;
+      }
+      .warn-line ha-icon {
+        --mdc-icon-size: 16px;
+      }
+      /* Popover (run confirm / overflow menu). */
+      .popover {
+        position: absolute;
+        top: 44px;
+        right: 0;
+        z-index: 5;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+        padding: 12px;
+        min-width: 200px;
+      }
+      .popover .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 0.88rem;
+        padding: 8px 6px;
+        cursor: pointer;
+        border-radius: 6px;
+        text-align: left;
+      }
+      .popover .menu-item:hover {
+        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+      }
+      .popover .menu-item.danger {
+        color: var(--error-color);
+      }
+      .popover ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      /* Editor dialog sticky frame. */
+      .dialog.sticky {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        max-height: 92vh;
+        max-width: 760px;
+      }
+      .dialog-head {
+        position: sticky;
+        top: 0;
+        background: var(--card-background-color);
+        padding: 18px 24px 12px;
+        border-bottom: 1px solid var(--divider-color);
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .dialog-head h3 {
+        margin: 0;
+        flex: 1;
+      }
+      .dialog-scroll {
+        overflow-y: auto;
+        padding: 12px 24px;
+      }
+      .dialog-foot {
+        position: sticky;
+        bottom: 0;
+        background: var(--card-background-color);
+        padding: 12px 24px;
+        border-top: 1px solid var(--divider-color);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .seg {
         display: inline-flex;
@@ -2116,6 +3259,31 @@ class ViewScenarios extends i {
       }
       .quick-add .chip {
         white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .quick-add .chip ha-icon {
+        --mdc-icon-size: 15px;
+      }
+
+      @container acview (max-width: 900px) {
+        .srow-daypart {
+          width: 100%;
+          order: 5;
+        }
+      }
+      @container acview (max-width: 620px) {
+        .srow-body {
+          gap: 8px;
+        }
+        .srow-actions {
+          width: 100%;
+          justify-content: flex-start;
+          border-top: 1px solid var(--divider-color);
+          padding-top: 6px;
+          margin-top: 2px;
+        }
       }
     `,
     ]; }
@@ -2126,9 +3294,8 @@ class ViewScenarios extends i {
             const scenario = this.snapshot.scenarios.find((s) => s.id === this.editScenarioId);
             this._openedDeepLink = this.editScenarioId;
             stripEditScenarioQueryFromUrl();
-            if (scenario) {
+            if (scenario)
                 this._openEdit(scenario);
-            }
         }
     }
     // ------------------------------------------------------------------ helpers
@@ -2138,34 +3305,42 @@ class ViewScenarios extends i {
     _areaName(areaId) {
         return this.hass.areas?.[areaId]?.name ?? areaId;
     }
+    _occFor(s) {
+        return this.snapshot.plan.find((o) => o.scenario_id === s.id);
+    }
     _triggerSummary(s) {
         const trig = s.trigger.type === "fixed_time"
             ? (s.trigger.time_local ?? "")
             : `${t(this.hass, `config_panel.sun_${s.trigger.sun_event}`)}${s.trigger.offset_min
                 ? ` ${s.trigger.offset_min > 0 ? "+" : ""}${s.trigger.offset_min} min`
                 : ""}`;
-        const random = s.random_window_min
-            ? ` ± ${s.random_window_min} min`
-            : "";
+        const random = s.random_window_min ? ` ± ${s.random_window_min} min` : "";
         const days = s.weekdays.length === 7
             ? t(this.hass, "config_panel.weekdays_all")
-            : s.weekdays
-                .map((d) => t(this.hass, `config_panel.weekday_${d}`))
-                .join(" ");
+            : s.weekdays.map((d) => t(this.hass, `config_panel.weekday_${d}`)).join(" ");
         return `${trig}${random} · ${days}`;
     }
-    _todayTime(s) {
-        const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
-        return occ ? formatTime(occ.planned_at) : null;
+    _condChipText(cond) {
+        const e = cond.entity_id ?? "";
+        switch (cond.type) {
+            case "entity_state":
+                return `${e} = ${(cond.states ?? []).join("/")}`;
+            case "entity_state_not":
+                return `${e} ≠ ${(cond.states ?? []).join("/")}`;
+            case "numeric_state":
+                return `${e} ${cond.above != null ? `> ${cond.above}` : ""}${cond.below != null ? ` < ${cond.below}` : ""}`.trim();
+            case "cover_position":
+                return `${t(this.hass, "config_panel.scenarios_position")} ${cond.op} ${cond.value}%`;
+            case "contact":
+                return `${t(this.hass, "config_panel.cond_type_contact")}: ${(cond.accepted ?? [])
+                    .map((s) => t(this.hass, `config_panel.contact_${s}`))
+                    .join("/")}`;
+            default:
+                return "";
+        }
     }
-    /**
-     * Approximate minute-of-day this scenario fires, for the time-of-day bar.
-     * Prefers today's computed occurrence (real sun times + offset); otherwise
-     * derives it from the trigger definition so disabled/off-day scenarios still
-     * show where in the day they belong.
-     */
     _scenarioMinute(s) {
-        const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
+        const occ = this._occFor(s);
         if (occ) {
             const m = minutesOfDay(occ.planned_at);
             if (m != null)
@@ -2192,40 +3367,50 @@ class ViewScenarios extends i {
             return null;
         return (((base + (s.trigger.offset_min ?? 0)) % 1440) + 1440) % 1440;
     }
-    /** Map a minute-of-day to a coarse daypart with an emoji sun-position hint. */
     _dayPart(min) {
         if (min < 5 * 60)
-            return { key: "night", emoji: "🌙" };
+            return "night";
         if (min < 9 * 60)
-            return { key: "morning", emoji: "🌅" };
+            return "morning";
         if (min < 12 * 60)
-            return { key: "forenoon", emoji: "🌤️" };
+            return "forenoon";
         if (min < 14 * 60)
-            return { key: "noon", emoji: "☀️" };
+            return "noon";
         if (min < 18 * 60)
-            return { key: "afternoon", emoji: "⛅" };
+            return "afternoon";
         if (min < 21 * 60)
-            return { key: "evening", emoji: "🌇" };
-        return { key: "night", emoji: "🌙" };
+            return "evening";
+        return "night";
+    }
+    _sunGradient() {
+        const night = "color-mix(in srgb, var(--primary-text-color) 10%, var(--card-background-color))";
+        const day = "color-mix(in srgb, var(--warning-color, #f0b23a) 20%, var(--card-background-color))";
+        const sr = this.snapshot.sun.sunrise
+            ? minutesOfDay(this.snapshot.sun.sunrise)
+            : null;
+        const ss = this.snapshot.sun.sunset
+            ? minutesOfDay(this.snapshot.sun.sunset)
+            : null;
+        if (sr == null || ss == null || sr >= ss)
+            return night;
+        const p = (m) => Math.max(0, Math.min(100, (m / 1440) * 100));
+        const a = p(sr);
+        const b = p(ss);
+        const f = 3;
+        return `linear-gradient(90deg, ${night} 0%, ${night} ${Math.max(0, a - f)}%, ${day} ${a + f}%, ${day} ${Math.max(a + f, b - f)}%, ${night} ${b + f}%, ${night} 100%)`;
     }
     _renderDaypart(s) {
         const min = this._scenarioMinute(s);
         if (min == null)
             return A;
-        const part = this._dayPart(min);
-        const label = t(this.hass, `config_panel.scenarios_daypart_${part.key}`);
+        const key = this._dayPart(min);
+        const label = t(this.hass, `config_panel.scenarios_daypart_${key}`);
         return b `
-      <div
-        class="daypart"
-        title="${label} · ${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}"
-      >
-        <span class="daypart-emoji">${part.emoji}</span>
-        <span class="daypart-label">${label}</span>
-        <div class="daybar">
-          <div
-            class="daybar-marker"
-            style="left:${(min / 1440) * 100}%"
-          ></div>
+      <div class="srow-daypart">
+        <ha-icon icon=${DAYPART_ICONS[key]}></ha-icon>
+        <span>${label}</span>
+        <div class="daybar" style="background:${this._sunGradient()}">
+          <div class="daybar-marker" style="left:${(min / 1440) * 100}%"></div>
         </div>
       </div>
     `;
@@ -2247,6 +3432,7 @@ class ViewScenarios extends i {
         this._draft = JSON.parse(JSON.stringify(scenario));
         this._error = undefined;
         this._warnings = scenario.warnings ?? [];
+        this._menuOpenId = null;
         this.requestUpdate();
     }
     _duplicate(scenario) {
@@ -2256,6 +3442,7 @@ class ViewScenarios extends i {
         this._draft = copy;
         this._error = undefined;
         this._warnings = [];
+        this._menuOpenId = null;
         this.requestUpdate();
     }
     async _save() {
@@ -2289,9 +3476,8 @@ class ViewScenarios extends i {
         }
     }
     async _delete(scenario) {
-        if (!window.confirm(t(this.hass, "config_panel.scenarios_delete_confirm", {
-            name: scenario.name,
-        }))) {
+        this._menuOpenId = null;
+        if (!window.confirm(t(this.hass, "config_panel.scenarios_delete_confirm", { name: scenario.name }))) {
             return;
         }
         try {
@@ -2307,6 +3493,7 @@ class ViewScenarios extends i {
     async _toggleEnabled(scenario) {
         try {
             const { warnings, ...payload } = scenario;
+            void warnings;
             await saveScenario(this.hass, this.entryId, {
                 ...payload,
                 enabled: !scenario.enabled,
@@ -2317,13 +3504,7 @@ class ViewScenarios extends i {
             this.requestUpdate();
         }
     }
-    async _move(scenario, delta) {
-        const ids = this.snapshot.scenarios.map((s) => s.id);
-        const idx = ids.indexOf(scenario.id);
-        const target = idx + delta;
-        if (idx < 0 || target < 0 || target >= ids.length)
-            return;
-        [ids[idx], ids[target]] = [ids[target], ids[idx]];
+    async _reorder(ids) {
         try {
             await reorderScenarios(this.hass, this.entryId, ids);
         }
@@ -2332,7 +3513,29 @@ class ViewScenarios extends i {
             this.requestUpdate();
         }
     }
+    async _move(index, delta) {
+        const ids = this.snapshot.scenarios.map((s) => s.id);
+        const target = index + delta;
+        if (target < 0 || target >= ids.length)
+            return;
+        [ids[index], ids[target]] = [ids[target], ids[index]];
+        await this._reorder(ids);
+    }
+    async _onDrop(dropIndex) {
+        const from = this._dragIndex;
+        this._dragIndex = null;
+        this._dragOverIndex = null;
+        if (from == null || from === dropIndex) {
+            this.requestUpdate();
+            return;
+        }
+        const ids = this.snapshot.scenarios.map((s) => s.id);
+        const [moved] = ids.splice(from, 1);
+        ids.splice(dropIndex, 0, moved);
+        await this._reorder(ids);
+    }
     async _runNow(scenarioId) {
+        this._runPopoverId = null;
         this._busy = true;
         this.requestUpdate();
         try {
@@ -2350,55 +3553,238 @@ class ViewScenarios extends i {
         }
     }
     // ---------------------------------------------------------------- rendering
+    _renderResultBadge(occ) {
+        const runs = occ.assignments;
+        let key;
+        if (runs.length && runs.every((r) => r.result === "executed"))
+            key = "scenarios_result_done";
+        else if (runs.some((r) => r.result === "executed"))
+            key = "scenarios_result_partial";
+        else
+            key = "scenarios_result_skipped";
+        return b `<span class="badge">${t(this.hass, `config_panel.${key}`)}</span>`;
+    }
+    _renderBadge(s) {
+        if (!s.enabled) {
+            return b `<span class="badge">${t(this.hass, "config_panel.scenarios_disabled_off")}</span>`;
+        }
+        const occ = this._occFor(s);
+        if (!occ)
+            return A;
+        if (occ.fired)
+            return this._renderResultBadge(occ);
+        return preflightBadge(this.hass, occ.preflight);
+    }
     _renderRow(scenario, index, total) {
-        const today = this._todayTime(scenario);
+        const occ = this._occFor(scenario);
+        const conds = scenario.conditions;
+        const shownConds = conds.slice(0, 2);
+        const dragover = this._dragOverIndex === index;
         return b `
-      <div class="list-row-wrap">
-        <div class="list-row-accent ${scenario.enabled ? "" : "inactive"}"></div>
-        <div class="list-row">
-          <div class="order-buttons">
-            <button class="btn-icon" .disabled=${index === 0}
-              title=${t(this.hass, "config_panel.scenarios_move_up")}
-              @click=${() => this._move(scenario, -1)}>▲</button>
-            <button class="btn-icon" .disabled=${index === total - 1}
-              title=${t(this.hass, "config_panel.scenarios_move_down")}
-              @click=${() => this._move(scenario, 1)}>▼</button>
-          </div>
+      <div
+        class="srow ${scenario.enabled ? "" : "inactive"} ${dragover ? "dragover" : ""}"
+        @dragover=${(e) => {
+            e.preventDefault();
+            if (this._dragOverIndex !== index) {
+                this._dragOverIndex = index;
+                this.requestUpdate();
+            }
+        }}
+        @drop=${() => this._onDrop(index)}
+        @keydown=${(e) => {
+            if (e.altKey && e.key === "ArrowUp") {
+                e.preventDefault();
+                this._move(index, -1);
+            }
+            else if (e.altKey && e.key === "ArrowDown") {
+                e.preventDefault();
+                this._move(index, 1);
+            }
+        }}
+        tabindex="0"
+      >
+        <div
+          class="drag-handle"
+          draggable="true"
+          title=${t(this.hass, "config_panel.scenarios_drag_handle")}
+          @dragstart=${() => {
+            this._dragIndex = index;
+        }}
+          @dragend=${() => {
+            this._dragIndex = null;
+            this._dragOverIndex = null;
+            this.requestUpdate();
+        }}
+        >
+          <ha-icon icon="mdi:drag"></ha-icon>
+        </div>
+        <div class="srow-body">
           <ha-switch
             .checked=${scenario.enabled}
             @click=${() => this._toggleEnabled(scenario)}
           ></ha-switch>
-          <div class="list-main">
-            <p class="list-name">${scenario.name}</p>
-            <p class="list-detail">
+          <div class="srow-main">
+            <div class="srow-name">
+              <span class="ellipsis">${scenario.name}</span>
+              ${this._renderBadge(scenario)}
+            </div>
+            <div class="srow-meta">
               ${this._triggerSummary(scenario)} ·
               ${t(this.hass, "config_panel.scenarios_covers_count", {
             n: scenario.assignments.length,
         })}
-              ${today
-            ? b ` · ${t(this.hass, "config_panel.scenarios_today_at", {
-                time: today,
-            })}`
-            : A}
               → ${scenario.action.position}%
-            </p>
-            ${this._renderDaypart(scenario)}
+              ${occ
+            ? b ` · ${t(this.hass, "config_panel.scenarios_today_at", {
+                time: formatTime(occ.planned_at),
+            })}`
+            : !scenario.enabled
+                ? b ` · ${t(this.hass, "config_panel.scenarios_not_in_plan")}`
+                : A}
+            </div>
+            ${shownConds.length
+            ? b `<div class="cond-chips">
+                  ${shownConds.map((c) => b `<span class="cond-chip">${this._condChipText(c)}</span>`)}
+                  ${conds.length > 2
+                ? b `<span class="cond-chip"
+                        >${t(this.hass, "config_panel.scenarios_cond_more", {
+                    n: conds.length - 2,
+                })}</span
+                      >`
+                : A}
+                </div>`
+            : A}
             ${scenario.warnings?.length
-            ? b `<p class="warning">⚠ ${scenario.warnings.join(" · ")}</p>`
+            ? b `<div class="warn-line">
+                  <ha-icon icon="mdi:alert-outline"></ha-icon>
+                  <span>${scenario.warnings.join(" · ")}</span>
+                </div>`
             : A}
           </div>
-          <div class="list-actions">
-            <button class="btn-outline" @click=${() => this._openEdit(scenario)}>
-              ${t(this.hass, "config_panel.scenarios_edit")}
+          ${this._renderDaypart(scenario)}
+          <div class="srow-actions">
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_run")}
+              aria-label=${t(this.hass, "config_panel.scenarios_run")}
+              @click=${() => {
+            this._runPopoverId =
+                this._runPopoverId === scenario.id ? null : scenario.id;
+            this._menuOpenId = null;
+            this.requestUpdate();
+        }}
+            >
+              <ha-icon icon="mdi:play"></ha-icon>
             </button>
-            <button class="btn-danger" @click=${() => this._delete(scenario)}>
-              ${t(this.hass, "config_panel.scenarios_delete")}
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_edit")}
+              aria-label=${t(this.hass, "config_panel.scenarios_edit")}
+              @click=${() => this._openEdit(scenario)}
+            >
+              <ha-icon icon="mdi:pencil-outline"></ha-icon>
             </button>
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_more")}
+              aria-label=${t(this.hass, "config_panel.scenarios_more")}
+              @click=${() => {
+            this._menuOpenId =
+                this._menuOpenId === scenario.id ? null : scenario.id;
+            this._runPopoverId = null;
+            this.requestUpdate();
+        }}
+            >
+              <ha-icon icon="mdi:dots-vertical"></ha-icon>
+            </button>
+            ${this._runPopoverId === scenario.id
+            ? this._renderRunPopover(scenario)
+            : A}
+            ${this._menuOpenId === scenario.id
+            ? this._renderMenu(scenario, index, total)
+            : A}
           </div>
         </div>
       </div>
     `;
     }
+    _renderRunPopover(scenario) {
+        return b `
+      <div class="popover" @click=${(e) => e.stopPropagation()}>
+        <p style="margin:0 0 8px;font-size:0.88rem">
+          ${t(this.hass, "config_panel.scenarios_run_now_confirm")}
+        </p>
+        <label class="checkbox-row" style="margin:0 0 10px">
+          <input
+            type="checkbox"
+            .checked=${this._runIgnoreConditions}
+            @change=${(e) => {
+            this._runIgnoreConditions = e.target.checked;
+        }}
+          />
+          ${t(this.hass, "config_panel.scenarios_run_ignore_short")}
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button
+            class="btn-outline"
+            @click=${() => {
+            this._runPopoverId = null;
+            this.requestUpdate();
+        }}
+          >
+            ${t(this.hass, "config_panel.cancel")}
+          </button>
+          <button
+            class="btn"
+            .disabled=${this._busy}
+            @click=${() => this._runNow(scenario.id)}
+          >
+            ${t(this.hass, "config_panel.scenarios_run")}
+          </button>
+        </div>
+      </div>
+    `;
+    }
+    _renderMenu(scenario, index, total) {
+        return b `
+      <div class="popover" @click=${(e) => e.stopPropagation()}>
+        <button
+          class="menu-item"
+          .disabled=${index === 0}
+          @click=${() => {
+            this._menuOpenId = null;
+            this._move(index, -1);
+        }}
+        >
+          <ha-icon icon="mdi:chevron-up"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_move_up")}
+        </button>
+        <button
+          class="menu-item"
+          .disabled=${index === total - 1}
+          @click=${() => {
+            this._menuOpenId = null;
+            this._move(index, 1);
+        }}
+        >
+          <ha-icon icon="mdi:chevron-down"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_move_down")}
+        </button>
+        <button class="menu-item" @click=${() => this._duplicate(scenario)}>
+          <ha-icon icon="mdi:content-copy"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_duplicate")}
+        </button>
+        <button class="menu-item danger" @click=${() => this._delete(scenario)}>
+          <ha-icon icon="mdi:delete-outline"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_delete")}
+        </button>
+      </div>
+    `;
+    }
+    // ---- editor dialog sections (unchanged logic, emoji-free) ----
     _renderWhenSection(draft) {
         return b `
       <div class="section-title">${t(this.hass, "config_panel.scenarios_when")}</div>
@@ -2420,19 +3806,17 @@ class ViewScenarios extends i {
           </button>
         </div>
         ${draft.trigger.type === "fixed_time"
-            ? b `
-              <input
-                type="time"
-                style="width:auto"
-                .value=${draft.trigger.time_local ?? "07:00"}
-                @input=${(e) => this._patch({
+            ? b `<input
+              type="time"
+              style="width:auto"
+              .value=${draft.trigger.time_local ?? "07:00"}
+              @input=${(e) => this._patch({
                 trigger: {
                     ...draft.trigger,
                     time_local: e.target.value,
                 },
             })}
-              />
-            `
+            />`
             : b `
               <select
                 style="width:auto"
@@ -2445,14 +3829,14 @@ class ViewScenarios extends i {
                 },
             })}
               >
-                ${["sunrise", "sunset", "solar_noon"].map((ev) => b `
-                    <option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
-                      ${t(this.hass, `config_panel.sun_${ev}`)}
-                    </option>
-                  `)}
+                ${["sunrise", "sunset", "solar_noon"].map((ev) => b `<option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
+                    ${t(this.hass, `config_panel.sun_${ev}`)}
+                  </option>`)}
               </select>
               <div>
-                <label class="field-label">${t(this.hass, "config_panel.scenarios_offset_min")}</label>
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.scenarios_offset_min")}</label
+                >
                 <input
                   type="number"
                   min="-720"
@@ -2469,38 +3853,33 @@ class ViewScenarios extends i {
               </div>
             `}
       </div>
+      ${this._renderLivePreview(draft)}
 
       <label class="field-label">${t(this.hass, "config_panel.scenarios_random")}</label>
       ${renderHelp(this.hass, "random")}
       <div class="row">
         <span class="chips">
-          ${RANDOM_WINDOWS.map((w) => b `
-              <button
-                type="button"
-                class="chip ${draft.random_window_min === w ? "selected" : ""}"
-                @click=${() => this._patch({ random_window_min: w })}
-              >
-                ${w === 0 ? t(this.hass, "config_panel.off") : `${w} min`}
-              </button>
-            `)}
+          ${RANDOM_WINDOWS.map((w) => b `<button
+              type="button"
+              class="chip ${draft.random_window_min === w ? "selected" : ""}"
+              @click=${() => this._patch({ random_window_min: w })}
+            >
+              ${w === 0 ? t(this.hass, "config_panel.off") : `${w} min`}
+            </button>`)}
         </span>
         ${draft.random_window_min
-            ? b `
-              <select
-                style="width:auto"
-                .value=${draft.random_direction}
-                @change=${(e) => this._patch({
+            ? b `<select
+              style="width:auto"
+              .value=${draft.random_direction}
+              @change=${(e) => this._patch({
                 random_direction: e.target
                     .value,
             })}
-              >
-                ${["after", "before", "both"].map((d) => b `
-                    <option value=${d} ?selected=${draft.random_direction === d}>
-                      ${t(this.hass, `config_panel.random_${d}`)}
-                    </option>
-                  `)}
-              </select>
-            `
+            >
+              ${["after", "before", "both"].map((d) => b `<option value=${d} ?selected=${draft.random_direction === d}>
+                  ${t(this.hass, `config_panel.random_${d}`)}
+                </option>`)}
+            </select>`
             : A}
       </div>
 
@@ -2508,41 +3887,54 @@ class ViewScenarios extends i {
       <div class="chips" style="margin-bottom:12px">
         ${WEEKDAYS.map((d) => {
             const selected = draft.weekdays.includes(d);
-            return b `
-            <button
-              type="button"
-              class="chip ${selected ? "selected" : ""}"
-              @click=${() => this._patch({
+            return b `<button
+            type="button"
+            class="chip ${selected ? "selected" : ""}"
+            @click=${() => this._patch({
                 weekdays: selected
                     ? draft.weekdays.filter((x) => x !== d)
                     : [...draft.weekdays, d],
             })}
-            >
-              ${t(this.hass, `config_panel.weekday_${d}`)}
-            </button>
-          `;
+          >
+            ${t(this.hass, `config_panel.weekday_${d}`)}
+          </button>`;
         })}
       </div>
 
       <label class="field-label">${t(this.hass, "config_panel.scenarios_retry")}</label>
       <div class="chips" style="margin-bottom:4px">
-        ${RETRY_WINDOWS.map((w) => b `
-            <button
-              type="button"
-              class="chip ${draft.retry_window_min === w ? "selected" : ""}"
-              @click=${() => this._patch({ retry_window_min: w })}
-            >
-              ${w === 0
+        ${RETRY_WINDOWS.map((w) => b `<button
+            type="button"
+            class="chip ${draft.retry_window_min === w ? "selected" : ""}"
+            @click=${() => this._patch({ retry_window_min: w })}
+          >
+            ${w === 0
             ? t(this.hass, "config_panel.off")
             : w < 120
                 ? `${w} min`
                 : `${w / 60} h`}
-            </button>
-          `)}
+          </button>`)}
       </div>
       <p class="section-desc">${t(this.hass, "config_panel.scenarios_retry_hint")}</p>
       ${renderHelp(this.hass, "retry")}
     `;
+    }
+    /** Live preview of today's computed trigger time under the WHEN section. */
+    _renderLivePreview(draft) {
+        if (!draft.id)
+            return A;
+        const occ = this._occFor(draft);
+        if (!occ)
+            return A;
+        return b `<p class="section-desc" style="margin-top:6px">
+      ${t(this.hass, "config_panel.scenarios_today_at", {
+            time: formatTime(occ.planned_at),
+        })}${occ.random_offset_min
+            ? ` (${t(this.hass, "config_panel.today_random_offset", {
+                n: occ.random_offset_min,
+            })})`
+            : ""}
+    </p>`;
     }
     _renderThenSection(draft) {
         const anyTilt = draft.assignments.some((a) => this.snapshot.covers.find((c) => c.id === a.cover_item_id)?.capabilities
@@ -2550,7 +3942,12 @@ class ViewScenarios extends i {
         return b `
       <div class="section-title">${t(this.hass, "config_panel.scenarios_then")}</div>
       <div class="slider-row">
-        <span class="muted">${t(this.hass, "config_panel.scenarios_position")}</span>
+        <ha-icon
+          icon=${draft.action.position >= 50
+            ? "mdi:window-shutter-open"
+            : "mdi:window-shutter"}
+          style="--mdc-icon-size:22px;color:var(--secondary-text-color)"
+        ></ha-icon>
         <input
           type="range"
           min="0"
@@ -2580,42 +3977,38 @@ class ViewScenarios extends i {
       </div>
       <p class="section-desc">${t(this.hass, "config_panel.scenarios_position_hint")}</p>
       ${anyTilt
-            ? b `
-            <div class="slider-row">
-              <span class="muted">${t(this.hass, "config_panel.scenarios_tilt")}</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                .value=${String(draft.action.tilt_position ?? 0)}
-                .disabled=${draft.action.tilt_position == null}
-                @input=${(e) => this._patch({
+            ? b `<div class="slider-row">
+            <span class="muted">${t(this.hass, "config_panel.scenarios_tilt")}</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              .value=${String(draft.action.tilt_position ?? 0)}
+              .disabled=${draft.action.tilt_position == null}
+              @input=${(e) => this._patch({
                 action: {
                     ...draft.action,
                     tilt_position: Number(e.target.value),
                 },
             })}
-              />
-              <label class="checkbox-row" style="margin:0">
-                <input
-                  type="checkbox"
-                  .checked=${draft.action.tilt_position != null}
-                  @change=${(e) => this._patch({
+            />
+            <label class="checkbox-row" style="margin:0">
+              <input
+                type="checkbox"
+                .checked=${draft.action.tilt_position != null}
+                @change=${(e) => this._patch({
                 action: {
                     ...draft.action,
-                    tilt_position: e.target.checked
-                        ? 50
-                        : null,
+                    tilt_position: e.target.checked ? 50 : null,
                 },
             })}
-                />
-                ${draft.action.tilt_position != null
+              />
+              ${draft.action.tilt_position != null
                 ? `${draft.action.tilt_position}%`
                 : t(this.hass, "config_panel.off")}
-              </label>
-            </div>
-          `
+            </label>
+          </div>`
             : A}
       <div class="row" style="margin-top:8px">
         <div>
@@ -2644,7 +4037,9 @@ class ViewScenarios extends i {
         <summary>${t(this.hass, "config_panel.scenarios_advanced")}</summary>
         <div class="row" style="margin-top:8px">
           <div>
-            <label class="field-label">${t(this.hass, "config_panel.scenarios_min_delta")}</label>
+            <label class="field-label"
+              >${t(this.hass, "config_panel.scenarios_min_delta")}</label
+            >
             <input
               type="number"
               min="0"
@@ -2677,7 +4072,6 @@ class ViewScenarios extends i {
         const assignments = this._draft.assignments.map((a, i) => i === index ? { ...a, ...patch } : a);
         this._patch({ assignments });
     }
-    /** Append the given covers as assignments, skipping already-assigned ones. */
     _addCovers(covers) {
         if (!this._draft || !covers.length)
             return;
@@ -2702,19 +4096,26 @@ class ViewScenarios extends i {
         <div class="assignment-head">
           <span class="name">${this._coverName(assignment.cover_item_id)}</span>
           ${assignment.extra_conditions.length
-            ? b `<span class="badge">${t(this.hass, "config_panel.scenarios_extra_conditions_badge", { n: assignment.extra_conditions.length })}</span>`
+            ? b `<span class="badge"
+                >${t(this.hass, "config_panel.scenarios_extra_conditions_badge", {
+                n: assignment.extra_conditions.length,
+            })}</span
+              >`
             : A}
           ${hasOverride
-            ? b `<span class="badge">${t(this.hass, "config_panel.scenarios_override_badge")}</span>`
+            ? b `<span class="badge"
+                >${t(this.hass, "config_panel.scenarios_override_badge")}</span
+              >`
             : A}
           <button
-            class="cond-remove"
+            class="iconbtn danger"
+            aria-label=${t(this.hass, "config_panel.scenarios_remove_cover")}
             title=${t(this.hass, "config_panel.scenarios_remove_cover")}
             @click=${() => this._patch({
             assignments: draft.assignments.filter((_, i) => i !== index),
         })}
           >
-            ✕
+            <ha-icon icon="mdi:close"></ha-icon>
           </button>
         </div>
         <details class="expand">
@@ -2738,7 +4139,9 @@ class ViewScenarios extends i {
           ${renderHelp(this.hass, "override")}
           <div class="row">
             <div>
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_position")}</label>
+              <label class="field-label"
+                >${t(this.hass, "config_panel.scenarios_position")}</label
+              >
               <input
                 type="number"
                 min="0"
@@ -2758,16 +4161,17 @@ class ViewScenarios extends i {
               />
             </div>
             ${cover?.capabilities.supports_tilt
-            ? b `
-                  <div>
-                    <label class="field-label">${t(this.hass, "config_panel.scenarios_tilt")}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      style="width:90px"
-                      .value=${ov.tilt_position == null ? "" : String(ov.tilt_position)}
-                      @input=${(e) => {
+            ? b `<div>
+                  <label class="field-label"
+                    >${t(this.hass, "config_panel.scenarios_tilt")}</label
+                  >
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    style="width:90px"
+                    .value=${ov.tilt_position == null ? "" : String(ov.tilt_position)}
+                    @input=${(e) => {
                 const raw = e.target.value;
                 this._patchAssignment(index, {
                     action_override: {
@@ -2776,12 +4180,13 @@ class ViewScenarios extends i {
                     },
                 });
             }}
-                    />
-                  </div>
-                `
+                  />
+                </div>`
             : A}
             <div>
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_mode")}</label>
+              <label class="field-label"
+                >${t(this.hass, "config_panel.scenarios_mode")}</label
+              >
               <select
                 style="width:auto"
                 @change=${(e) => {
@@ -2813,7 +4218,6 @@ class ViewScenarios extends i {
     _renderQuickAdd(addable) {
         if (!addable.length)
             return A;
-        // Direction buckets: nearest-of-8 compass point per cover azimuth.
         const byDir = new Map();
         for (const c of addable) {
             if (c.azimuth == null)
@@ -2821,7 +4225,6 @@ class ViewScenarios extends i {
             const deg = nearestCompassDeg(c.azimuth);
             (byDir.get(deg) ?? byDir.set(deg, []).get(deg)).push(c);
         }
-        // Room buckets, sorted by area name.
         const byArea = new Map();
         for (const c of addable) {
             if (!c.area_id)
@@ -2837,14 +4240,8 @@ class ViewScenarios extends i {
         <span class="quick-add-label"
           >${t(this.hass, "config_panel.scenarios_quick_add")}</span
         >
-        <button
-          type="button"
-          class="chip"
-          @click=${() => this._addCovers(addable)}
-        >
-          ＋ ${t(this.hass, "config_panel.scenarios_quick_add_all", {
-            n: addable.length,
-        })}
+        <button type="button" class="chip" @click=${() => this._addCovers(addable)}>
+          ${t(this.hass, "config_panel.scenarios_quick_add_all", { n: addable.length })}
         </button>
         ${anyDir
             ? b `<span class="quick-add-group">
@@ -2857,13 +4254,9 @@ class ViewScenarios extends i {
                     ? b `<button
                       type="button"
                       class="chip"
-                      title=${t(this.hass, "config_panel.scenarios_quick_add_direction_title", {
-                        label,
-                        n: covers.length,
-                    })}
                       @click=${() => this._addCovers(covers)}
                     >
-                      🧭 ${label} ·${covers.length}
+                      <ha-icon icon="mdi:compass-outline"></ha-icon>${label} ·${covers.length}
                     </button>`
                     : A;
             })}
@@ -2879,7 +4272,7 @@ class ViewScenarios extends i {
                   class="chip"
                   @click=${() => this._addCovers(a.covers)}
                 >
-                  📍 ${a.name} ·${a.covers.length}
+                  <ha-icon icon="mdi:map-marker-outline"></ha-icon>${a.name} ·${a.covers.length}
                 </button>`)}
             </span>`
             : A}
@@ -2895,9 +4288,8 @@ class ViewScenarios extends i {
       ${this._renderQuickAdd(addable)}
       ${draft.assignments.map((a, i) => this._renderAssignment(draft, a, i))}
       ${addable.length
-            ? b `
-            <select
-              @change=${(e) => {
+            ? b `<select
+            @change=${(e) => {
                 const sel = e.target;
                 if (!sel.value)
                     return;
@@ -2913,13 +4305,10 @@ class ViewScenarios extends i {
                 });
                 sel.value = "";
             }}
-            >
-              <option value="">
-                ＋ ${t(this.hass, "config_panel.scenarios_add_cover")}
-              </option>
-              ${addable.map((c) => b `<option value=${c.id}>${c.name}</option>`)}
-            </select>
-          `
+          >
+            <option value="">+ ${t(this.hass, "config_panel.scenarios_add_cover")}</option>
+            ${addable.map((c) => b `<option value=${c.id}>${c.name}</option>`)}
+          </select>`
             : A}
       ${!this.snapshot.covers.length
             ? b `<p class="muted">${t(this.hass, "config_panel.scenarios_no_covers_hint")}</p>`
@@ -2931,33 +4320,23 @@ class ViewScenarios extends i {
         if (!draft)
             return A;
         return b `
-      <div class="dialog-backdrop" @click=${(e) => {
+      <div
+        class="dialog-backdrop"
+        @click=${(e) => {
             if (e.target === e.currentTarget) {
                 this._draft = null;
                 this.requestUpdate();
             }
-        }}>
-        <div class="dialog" style="max-width:760px">
-          <h3>
-            ${draft.id
+        }}
+      >
+        <div class="dialog sticky">
+          <div class="dialog-head">
+            <h3>
+              ${draft.id
             ? t(this.hass, "config_panel.scenarios_dialog_edit", { name: draft.name })
             : t(this.hass, "config_panel.scenarios_dialog_new")}
-          </h3>
-          ${this._error ? b `<p class="error">${this._error}</p>` : A}
-          ${this._warnings.map((w) => b `<p class="warning">⚠ ${w}</p>`)}
-
-          ${renderEntityDatalist(this.hass, "ac-all-entities", null, this.snapshot.config.favorite_entity_ids)}
-
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_field_name")}</label>
-              <input
-                type="text"
-                .value=${draft.name}
-                @input=${(e) => this._patch({ name: e.target.value })}
-              />
-            </div>
-            <label class="checkbox-row" style="margin:0 0 6px">
+            </h3>
+            <label class="checkbox-row" style="margin:0">
               <input
                 type="checkbox"
                 .checked=${draft.enabled}
@@ -2966,14 +4345,37 @@ class ViewScenarios extends i {
               ${t(this.hass, "config_panel.scenarios_enabled")}
             </label>
           </div>
+          <div class="dialog-scroll">
+            ${this._error ? b `<p class="error">${this._error}</p>` : A}
+            ${this._warnings.map((w) => b `<p class="warning">
+                <ha-icon icon="mdi:alert-outline" style="--mdc-icon-size:16px"></ha-icon>
+                ${w}
+              </p>`)}
 
-          ${this._renderWhenSection(draft)}
+            ${renderEntityDatalist(this.hass, "ac-all-entities", null, this.snapshot.config.favorite_entity_ids)}
 
-          <div class="section-title">${t(this.hass, "config_panel.scenarios_only_if")}</div>
-          <p class="section-desc">
-            ${t(this.hass, "config_panel.scenarios_only_if_desc")}
-          </p>
-          ${renderConditionEditor({
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.scenarios_field_name")}</label
+                >
+                <input
+                  type="text"
+                  .value=${draft.name}
+                  @input=${(e) => this._patch({ name: e.target.value })}
+                />
+              </div>
+            </div>
+
+            ${this._renderWhenSection(draft)}
+
+            <div class="section-title">
+              ${t(this.hass, "config_panel.scenarios_only_if")}
+            </div>
+            <p class="section-desc">
+              ${t(this.hass, "config_panel.scenarios_only_if_desc")}
+            </p>
+            ${renderConditionEditor({
             hass: this.hass,
             conditions: draft.conditions,
             onChange: (conds) => this._patch({ conditions: conds }),
@@ -2982,13 +4384,11 @@ class ViewScenarios extends i {
                 ?.contact_entity_id)),
         })}
 
-          ${this._renderThenSection(draft)}
-          ${this._renderCoversSection(draft)}
-
-          <div class="dialog-actions">
+            ${this._renderThenSection(draft)} ${this._renderCoversSection(draft)}
+          </div>
+          <div class="dialog-foot">
             ${draft.id
-            ? b `
-                  <label class="checkbox-row" style="margin:0">
+            ? b `<label class="checkbox-row" style="margin:0">
                     <input
                       type="checkbox"
                       .checked=${this._runIgnoreConditions}
@@ -2996,7 +4396,7 @@ class ViewScenarios extends i {
                 this._runIgnoreConditions = e.target.checked;
             }}
                     />
-                    ${t(this.hass, "config_panel.scenarios_run_ignore")}
+                    ${t(this.hass, "config_panel.scenarios_run_ignore_short")}
                   </label>
                   <button
                     class="btn-outline"
@@ -3004,10 +4404,9 @@ class ViewScenarios extends i {
                     @click=${() => this._runNow(draft.id)}
                   >
                     ${t(this.hass, "config_panel.scenarios_run_now")}
-                  </button>
-                `
+                  </button>`
             : A}
-            <span class="spacer"></span>
+            <span style="flex:1"></span>
             <button
               class="btn-outline"
               @click=${() => {
@@ -3036,14 +4435,15 @@ class ViewScenarios extends i {
         <div class="card-header">
           <ha-icon icon="mdi:script-text-outline"></ha-icon>
           ${t(this.hass, "config_panel.scenarios_title")}
+          <span class="muted" style="font-weight:400">${snap.scenarios.length}</span>
           <span class="header-actions">
             <button class="btn" @click=${this._openAdd}>
-              ＋ ${t(this.hass, "config_panel.scenarios_add")}
+              ${t(this.hass, "config_panel.scenarios_add")}
             </button>
           </span>
         </div>
         <div class="card-content">
-          <p class="intro">${t(this.hass, "config_panel.scenarios_intro")}</p>
+          <p class="intro">${t(this.hass, "config_panel.scenarios_order_desc")}</p>
           ${renderHelp(this.hass, "priority")}
           ${this._error && !this._draft
             ? b `<p class="error">${this._error}</p>`
@@ -3062,192 +4462,637 @@ class ViewScenarios extends i {
 }
 defineCustomElementOnce("ac-view-scenarios", ViewScenarios);
 
-/** Aggregate status of one planned assignment for coloring. */
-function runBadge(occ, run) {
+/** Night → day → night gradient derived from the real sun times. */
+function dayGradient(sunriseMin, sunsetMin) {
+    const night = "var(--ac-timeline-night)";
+    const day = "var(--ac-timeline-day)";
+    if (sunriseMin == null || sunsetMin == null || sunriseMin >= sunsetMin) {
+        return night;
+    }
+    const p = (m) => Math.max(0, Math.min(100, (m / 1440) * 100));
+    const sr = p(sunriseMin);
+    const ss = p(sunsetMin);
+    const f = 2.5; // fade width in %
+    return (`linear-gradient(90deg, ${night} 0%, ${night} ${Math.max(0, sr - f)}%, ` +
+        `${day} ${sr + f}%, ${day} ${Math.max(sr + f, ss - f)}%, ` +
+        `${night} ${ss + f}%, ${night} 100%)`);
+}
+/**
+ * Assign a stacking row (0 or 1) to each event so two markers closer than
+ * 40 min never visually overlap (plan §4 timeline).
+ */
+function assignRows(events) {
+    const rows = new Map();
+    const sorted = [...events].sort((a, b) => a.minute - b.minute);
+    let prevMin = -1e3;
+    let prevRow = 1;
+    for (const ev of sorted) {
+        const row = ev.minute - prevMin < 40 ? (prevRow === 0 ? 1 : 0) : 0;
+        rows.set(ev.id, row);
+        prevMin = ev.minute;
+        prevRow = row;
+    }
+    return rows;
+}
+function renderTimeline(opts) {
+    const rows = assignRows(opts.events);
+    const ticks = [];
+    for (let h = 0; h <= 24; h += opts.axisEveryH)
+        ticks.push(h);
+    const gradient = dayGradient(opts.sunriseMin, opts.sunsetMin);
+    return b `
+    <div class="tl-scroll">
+      <div class="tl" style="background:${gradient}">
+        ${ticks.map((h) => b `<span
+            class="tl-tick"
+            style="left:${(h / 24) * 100}%"
+          ></span>`)}
+        <div class="tl-now" style="left:${(opts.nowMin / 1440) * 100}%">
+          <span class="tl-now-dot"></span>
+        </div>
+        ${opts.events.map((ev) => {
+        const left = (ev.minute / 1440) * 100;
+        const row = rows.get(ev.id) ?? 0;
+        return b `
+            <button
+              type="button"
+              class="tl-marker ${ev.colorClass} row-${row}"
+              style="left:${left}%"
+              title=${ev.label}
+              aria-label=${ev.label}
+              @click=${ev.onClick}
+            >
+              ${opts.showTimeLabels
+            ? b `<span class="tl-time">${ev.timeLabel}</span>`
+            : A}
+              <span class="tl-dot"></span>
+            </button>
+          `;
+    })}
+      </div>
+      <div class="tl-axis">
+        ${ticks.map((h) => b `<span class="tl-axis-label" style="left:${(h / 24) * 100}%"
+              >${h}</span
+            >`)}
+      </div>
+    </div>
+  `;
+}
+const timelineStyles = i$3 `
+  :host {
+    --ac-timeline-night: color-mix(
+      in srgb,
+      var(--primary-text-color) 10%,
+      var(--card-background-color)
+    );
+    --ac-timeline-day: color-mix(
+      in srgb,
+      var(--warning-color, #f0b23a) 20%,
+      var(--card-background-color)
+    );
+  }
+  .tl-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .tl {
+    position: relative;
+    height: 96px;
+    min-width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--divider-color);
+    box-sizing: border-box;
+  }
+  .tl-tick {
+    position: absolute;
+    top: 0;
+    bottom: 18px;
+    width: 1px;
+    background: color-mix(in srgb, var(--divider-color) 70%, transparent);
+  }
+  .tl-now {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--primary-color);
+    transform: translateX(-1px);
+    z-index: 3;
+  }
+  .tl-now-dot {
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    transform: translateX(-50%);
+    animation: tl-pulse 2s ease-in-out infinite;
+  }
+  @keyframes tl-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary-color) 55%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 5px transparent;
+    }
+  }
+  .tl-marker {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    transform: translateX(-50%);
+    color: var(--secondary-text-color);
+    z-index: 2;
+  }
+  .tl-marker.row-0 {
+    top: 10px;
+  }
+  .tl-marker.row-1 {
+    top: 42px;
+  }
+  .tl-time {
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
+    background: var(--card-background-color);
+    padding: 0 3px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .tl-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: 2px solid var(--card-background-color);
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: transform 0.12s ease;
+  }
+  .tl-marker:hover .tl-dot {
+    transform: scale(1.3);
+  }
+  .tl-marker.executed .tl-dot {
+    background: var(--success-color, #43a047);
+  }
+  .tl-marker.will_run .tl-dot,
+  .tl-marker.planned .tl-dot {
+    background: var(--primary-color);
+  }
+  .tl-marker.would_skip .tl-dot,
+  .tl-marker.armed .tl-dot {
+    background: var(--warning-color, #f0b23a);
+  }
+  .tl-marker.skipped .tl-dot,
+  .tl-marker.expired .tl-dot,
+  .tl-marker.unknown .tl-dot {
+    background: var(--disabled-text-color, #6d7476);
+  }
+  .tl-marker.blocked_safety .tl-dot,
+  .tl-marker.unavailable .tl-dot {
+    background: var(--error-color, #d93025);
+  }
+  .tl-axis {
+    position: relative;
+    height: 14px;
+    margin-top: 3px;
+  }
+  .tl-axis-label {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.68rem;
+    color: var(--secondary-text-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @container acview (max-width: 900px) {
+    .tl {
+      height: 84px;
+    }
+  }
+  @container acview (max-width: 620px) {
+    .tl {
+      height: 72px;
+    }
+    .tl-marker.row-1 {
+      top: 34px;
+    }
+  }
+`;
+
+const EXPAND_KEY = "ac-today-expanded";
+/** Aggregate display kind of a block: preflight verdict, or real result. */
+function occKind(occ) {
     if (!occ.fired)
-        return "planned";
+        return occ.preflight?.verdict ?? "would_run";
+    const runs = occ.assignments;
+    if (runs.some((r) => r.status === "armed"))
+        return "armed";
+    if (runs.some((r) => r.result === "blocked_safety"))
+        return "blocked_safety";
+    if (runs.some((r) => r.result === "unavailable"))
+        return "unavailable";
+    if (runs.some((r) => r.result === "executed"))
+        return "executed";
+    return "skipped";
+}
+/** Map a block kind to a timeline marker color class. */
+function timelineClass(kind) {
+    if (kind === "would_run")
+        return "will_run";
+    return kind;
+}
+/** Per-cover run kind for the grouped list. */
+function runKind(occ, run) {
+    if (!occ.fired)
+        return run.preflight?.verdict ?? "would_run";
     if (run.status === "armed")
         return "armed";
-    if (run.status === "expired")
-        return "expired";
     return run.result ?? "skipped";
 }
-class ViewToday extends i {
-    constructor() {
-        super(...arguments);
-        this._busy = false;
-        this._expanded = new Set();
+function occHasIssue(occ) {
+    if (occ.fired) {
+        return occ.assignments.some((r) => ["blocked_safety", "unavailable"].includes(r.result ?? ""));
     }
+    if (occ.preflight && occ.preflight.verdict !== "would_run")
+        return true;
+    return occ.assignments.some((r) => r.preflight && r.preflight.verdict !== "would_run");
+}
+class ViewToday extends i {
     static { this.properties = {
         hass: { attribute: false },
         entryId: { type: String },
         snapshot: { attribute: false },
     }; }
+    constructor() {
+        super();
+        this._busy = false;
+        this._filter = "all";
+        this._expanded = new Set();
+        try {
+            const raw = sessionStorage.getItem(EXPAND_KEY);
+            if (raw)
+                this._expanded = new Set(JSON.parse(raw));
+        }
+        catch {
+            /* ignore */
+        }
+    }
     static _occKey(occ) {
         return `${occ.scenario_id}@${occ.planned_at}`;
     }
+    _isExpanded(occ) {
+        const key = ViewToday._occKey(occ);
+        if (this._expanded.has(`-${key}`))
+            return false; // explicitly collapsed
+        if (this._expanded.has(key))
+            return true;
+        // Blocks with problems auto-expand unless the user collapsed them.
+        return !occ.fired && occHasIssue(occ);
+    }
     _toggleOcc(occ) {
         const key = ViewToday._occKey(occ);
-        if (this._expanded.has(key))
-            this._expanded.delete(key);
-        else
+        const auto = !occ.fired && occHasIssue(occ);
+        const open = this._isExpanded(occ);
+        this._expanded.delete(key);
+        this._expanded.delete(`-${key}`);
+        if (open) {
+            // collapse: for auto-expanded blocks store an explicit "-" marker
+            if (auto)
+                this._expanded.add(`-${key}`);
+        }
+        else {
             this._expanded.add(key);
+        }
+        try {
+            sessionStorage.setItem(EXPAND_KEY, JSON.stringify([...this._expanded]));
+        }
+        catch {
+            /* ignore */
+        }
         this.requestUpdate();
     }
     static { this.styles = [
         sharedStyles,
+        timelineStyles,
         i$3 `
-      .head-row {
+      /* Status card: two-column head + Next up. */
+      .status-grid {
+        display: grid;
+        grid-template-columns: 1fr minmax(280px, 0.9fr);
+        gap: 20px;
+        align-items: start;
+      }
+      .status-main {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 12px 20px;
-        padding: 4px 0;
-      }
-      .head-row .spacer {
-        flex: 1;
-      }
-      .sun {
-        font-size: 0.875rem;
-        color: var(--secondary-text-color);
-        white-space: nowrap;
+        flex-direction: column;
+        gap: 10px;
       }
       .master {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 0.95rem;
+        gap: 10px;
+        font-size: 1rem;
+        font-weight: 500;
       }
-      .track-wrap {
-        margin: 18px 4px 4px;
-      }
-      .track {
-        position: relative;
-        height: 34px;
-        border-radius: 8px;
-        background: var(--secondary-background-color, rgba(0, 0, 0, 0.05));
-      }
-      .track .hour-grid {
-        position: absolute;
-        inset: 0;
-        display: flex;
-      }
-      .track .hour-grid span {
-        flex: 1;
-        border-left: 1px solid var(--divider-color);
-        opacity: 0.5;
-      }
-      .track .hour-grid span:first-child {
-        border-left: none;
-      }
-      .dot {
-        position: absolute;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        border: 2px solid var(--card-background-color);
-        box-sizing: border-box;
-        cursor: pointer;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-        transition: transform 0.12s ease;
-      }
-      .dot:hover {
-        transform: translate(-50%, -50%) scale(1.35);
-        z-index: 1;
-      }
-      .dot.executed {
-        background: var(--success-color, #0f9d58);
-      }
-      .dot.skipped,
-      .dot.expired {
-        background: var(--disabled-text-color, #9e9e9e);
-      }
-      .dot.armed {
-        background: var(--warning-color, #f4b400);
-      }
-      .dot.blocked_safety,
-      .dot.unavailable {
-        background: var(--error-color, #d93025);
-      }
-      .now-line {
-        position: absolute;
-        top: -4px;
-        bottom: -4px;
-        width: 2px;
-        background: var(--accent-color, #ff9800);
-      }
-      .axis {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.7rem;
+      .summary {
+        font-size: 0.85rem;
         color: var(--secondary-text-color);
-        margin-top: 4px;
       }
-      .occ {
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-      }
-      .occ-head {
+      .sun-row {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        gap: 8px 14px;
+        gap: 6px 18px;
+        margin-top: 2px;
+      }
+      .sun-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.85rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .sun-item ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--warning-color, #f0b23a);
+      }
+      .status-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      /* Next up panel. */
+      .nextup {
+        border: 1px solid var(--divider-color);
+        border-radius: 12px;
+        padding: 14px 16px;
+        background: var(--secondary-background-color, rgba(0, 0, 0, 0.03));
+      }
+      .nextup-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--secondary-text-color);
+        font-weight: 600;
         margin-bottom: 6px;
       }
-      .occ-time {
+      .nextup-time {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 4px;
+      }
+      .nextup-time .clock {
+        font-size: 1.15rem;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
       }
-      .occ-name {
-        font-weight: 500;
-        cursor: pointer;
-        color: var(--primary-color);
-        background: none;
-        border: none;
-        font: inherit;
-        padding: 0;
-      }
-      .occ-meta {
+      .nextup-in {
         font-size: 0.8rem;
         color: var(--secondary-text-color);
       }
-      .occ-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font: inherit;
-        font-size: 0.85rem;
+      .nextup-name {
+        font-size: 0.92rem;
+        margin: 2px 0;
+        text-wrap: pretty;
+      }
+      .nextup-detail {
+        font-size: 0.82rem;
         color: var(--secondary-text-color);
-        background: none;
-        border: none;
-        padding: 2px 0;
-        cursor: pointer;
       }
-      .occ-toggle:hover {
-        color: var(--primary-text-color);
-      }
-      .occ-toggle ha-icon {
-        --mdc-icon-size: 18px;
-      }
-      .occ-assignments {
+      /* Timeline legend. */
+      .legend {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 6px;
+        gap: 4px 14px;
+        margin-left: auto;
+        font-size: 0.74rem;
+        color: var(--secondary-text-color);
+        font-weight: 400;
       }
-      .assignment-chip {
+      .legend span {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        font-size: 0.82rem;
+        gap: 5px;
+      }
+      .legend .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+      }
+      .legend .dot.executed {
+        background: var(--success-color, #43a047);
+      }
+      .legend .dot.will_run {
+        background: var(--primary-color);
+      }
+      .legend .dot.would_skip {
+        background: var(--warning-color, #f0b23a);
+      }
+      .legend .dot.skipped {
+        background: var(--disabled-text-color, #6d7476);
+      }
+      /* Plan blocks. */
+      .plan-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .block {
         border: 1px solid var(--divider-color);
-        border-radius: 14px;
-        padding: 4px 10px;
+        border-left: 3px solid var(--divider-color);
+        border-radius: 10px;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+      .block.would_skip,
+      .block.armed {
+        border-left-color: var(--warning-color, #f0b23a);
+      }
+      .block.would_run,
+      .block.executed {
+        border-left-color: var(--primary-color);
+      }
+      .block.blocked_safety,
+      .block.unavailable {
+        border-left-color: var(--error-color, #d93025);
+      }
+      .block-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        box-sizing: border-box;
+      }
+      .block-head:hover {
+        background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+      }
+      .block-time {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .block-titles {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+      }
+      .block-line1 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .block-name {
+        font-weight: 500;
+      }
+      .block-offset {
+        font-size: 0.76rem;
+        color: var(--secondary-text-color);
+      }
+      .block-reason {
+        font-size: 0.8rem;
+        color: var(--warning-color, #f0b23a);
+      }
+      .block-edit {
+        flex-shrink: 0;
+      }
+      .block-chevron {
+        flex-shrink: 0;
+        color: var(--secondary-text-color);
+        --mdc-icon-size: 22px;
+        transition: transform 0.15s ease;
+      }
+      .block-body {
+        padding: 0 14px 14px;
+        border-top: 1px solid var(--divider-color);
+      }
+      .only-if {
+        margin: 12px 0;
+      }
+      .only-if-label {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--secondary-text-color);
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .covers-summary {
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        margin: 10px 0 8px;
+      }
+      .area-groups {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px 16px;
+      }
+      .area-group-title {
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 6px 0 2px;
+      }
+      .area-group-title .n {
+        opacity: 0.7;
+      }
+      .cover-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        padding: 3px 0;
+      }
+      .cover-line .cover-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--disabled-text-color, #6d7476);
+      }
+      .cover-line .cover-dot.would_run,
+      .cover-line .cover-dot.executed {
+        background: var(--primary-color);
+      }
+      .cover-line .cover-dot.would_skip,
+      .cover-line .cover-dot.armed {
+        background: var(--warning-color, #f0b23a);
+      }
+      .cover-line .cover-dot.blocked_safety {
+        background: var(--error-color, #d93025);
+      }
+      .cover-line .cover-target {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        color: var(--secondary-text-color);
+        flex-shrink: 0;
+      }
+      .cover-safety {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 0.78rem;
+        color: var(--error-color, #d93025);
+        margin: 2px 0 4px 16px;
+      }
+      .cover-safety ha-icon {
+        --mdc-icon-size: 15px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .show-all {
+        font: inherit;
+        font-size: 0.8rem;
+        color: var(--primary-color);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 0;
+      }
+
+      @container acview (max-width: 900px) {
+        .status-grid {
+          grid-template-columns: 1fr;
+        }
+        .legend {
+          margin-left: 0;
+        }
+        .area-groups {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @container acview (max-width: 620px) {
+        .area-groups {
+          grid-template-columns: 1fr;
+        }
       }
     `,
     ]; }
@@ -3285,162 +5130,387 @@ class ViewToday extends i {
     _openScenario(scenarioId) {
         navigate(this, `${exportPath(this.entryId, "scenarios")}?editScenario=${scenarioId}`);
     }
-    _renderTrack() {
-        const occs = this.snapshot.plan;
+    _scrollToBlock(occ) {
+        const el = this.renderRoot.querySelector(`#block-${CSS.escape(ViewToday._occKey(occ))}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (!this._isExpanded(occ))
+            this._toggleOcc(occ);
+    }
+    _areaName(areaId) {
+        if (!areaId)
+            return t(this.hass, "config_panel.covers_no_area");
+        return this.hass.areas?.[areaId]?.name ?? areaId;
+    }
+    // ------------------------------------------------------------- status card
+    _nextUp() {
         const nowMin = minutesOfDay(this.snapshot.now) ?? 0;
+        const upcoming = this.snapshot.plan
+            .filter((o) => !o.fired && (minutesOfDay(o.planned_at) ?? -1) >= nowMin)
+            .sort((a, b) => (minutesOfDay(a.planned_at) ?? 0) - (minutesOfDay(b.planned_at) ?? 0));
+        return upcoming[0] ?? null;
+    }
+    _renderStatusCard() {
+        const snap = this.snapshot;
+        const coverCount = snap.covers.length;
+        const scenarioCount = snap.scenarios.length;
+        const next = this._nextUp();
         return b `
-      <div class="track-wrap">
-        <div class="track">
-          <div class="hour-grid">
-            ${Array.from({ length: 24 }, () => b `<span></span>`)}
+      <ha-card>
+        <div class="card-content">
+          <div class="status-grid">
+            <div class="status-main">
+              <label class="master">
+                <ha-switch
+                  .checked=${snap.config.enabled}
+                  .disabled=${this._busy}
+                  @click=${this._toggleMaster}
+                ></ha-switch>
+                ${t(this.hass, "config_panel.today_master")}
+              </label>
+              <div class="summary">
+                ${t(this.hass, "config_panel.today_summary", {
+            scenarios: scenarioCount,
+            covers: coverCount,
+            time: formatTime(this._planRolledAt()),
+        })}
+              </div>
+              <div class="sun-row">
+                <span class="sun-item">
+                  <ha-icon icon="mdi:weather-sunset-up"></ha-icon>
+                  ${t(this.hass, "config_panel.today_sun_sunrise")}
+                  ${formatTime(snap.sun.sunrise)}
+                </span>
+                <span class="sun-item">
+                  <ha-icon icon="mdi:weather-sunset-down"></ha-icon>
+                  ${t(this.hass, "config_panel.today_sun_sunset")}
+                  ${formatTime(snap.sun.sunset)}
+                </span>
+                ${snap.sun.solar_noon
+            ? b `<span class="sun-item">
+                      <ha-icon icon="mdi:weather-sunny"></ha-icon>
+                      ${t(this.hass, "config_panel.today_sun_noon")}
+                      ${formatTime(snap.sun.solar_noon)}
+                    </span>`
+            : A}
+              </div>
+              <div class="status-actions">
+                <button
+                  type="button"
+                  class="iconbtn"
+                  aria-label=${t(this.hass, "config_panel.today_recalculate")}
+                  title=${t(this.hass, "config_panel.today_recalculate")}
+                  .disabled=${this._busy}
+                  @click=${this._recalculate}
+                >
+                  <ha-icon icon="mdi:refresh"></ha-icon>
+                </button>
+                <span class="muted">${t(this.hass, "config_panel.today_recalculate")}</span>
+              </div>
+              ${this._error ? b `<p class="error">${this._error}</p>` : A}
+              ${!snap.config.enabled
+            ? b `<p class="warning">
+                    ${t(this.hass, "config_panel.today_master_off_hint")}
+                  </p>`
+            : A}
+            </div>
+            ${next ? this._renderNextUp(next) : A}
           </div>
-          <div class="now-line" style="left:${(nowMin / 1440) * 100}%"></div>
-          ${occs.map((occ) => {
+        </div>
+      </ha-card>
+    `;
+    }
+    _planRolledAt() {
+        // Plan is rebuilt at local midnight; use the earliest base_at's day start.
+        const first = this.snapshot.plan[0];
+        if (!first)
+            return null;
+        const d = new Date(first.base_at);
+        if (Number.isNaN(d.getTime()))
+            return null;
+        d.setHours(0, 0, 0, 0);
+        return d.toISOString();
+    }
+    _renderNextUp(occ) {
+        const nowMin = minutesOfDay(this.snapshot.now) ?? 0;
+        const occMin = minutesOfDay(occ.planned_at) ?? 0;
+        const inMin = Math.max(0, occMin - nowMin);
+        const targetPos = occ.assignments[0]?.target_position ?? 0;
+        const reason = preflightReason(this.hass, occ.preflight);
+        return b `
+      <div class="nextup">
+        <div class="nextup-label">${t(this.hass, "config_panel.today_next_up")}</div>
+        <div class="nextup-time">
+          <span class="clock">${formatTime(occ.planned_at)}</span>
+          <span class="nextup-in"
+            >${t(this.hass, "config_panel.today_in_min", { n: inMin })}</span
+          >
+          ${preflightBadge(this.hass, occ.preflight)}
+        </div>
+        <div class="nextup-name">${occ.scenario_name}</div>
+        <div class="nextup-detail">
+          ${t(this.hass, "config_panel.today_covers_target", {
+            n: occ.assignments.length,
+            pos: targetPos,
+        })}${reason ? b ` · ${reason}` : A}
+        </div>
+      </div>
+    `;
+    }
+    // ---------------------------------------------------------- timeline card
+    _timelineEvents() {
+        return this.snapshot.plan
+            .map((occ) => {
             const m = minutesOfDay(occ.planned_at);
             if (m == null)
-                return A;
-            const worst = occ.assignments.length
-                ? runBadge(occ, occ.assignments[0])
-                : "planned";
-            return b `
-              <div
-                class="dot ${worst}"
-                style="left:${(m / 1440) * 100}%"
-                title="${formatTime(occ.planned_at)} · ${occ.scenario_name}"
-                @click=${() => this._openScenario(occ.scenario_id)}
-              ></div>
-            `;
-        })}
-        </div>
-        <div class="axis">
-          <span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span
-          ><span>24:00</span>
-        </div>
-      </div>
-    `;
+                return null;
+            return {
+                id: ViewToday._occKey(occ),
+                minute: m,
+                colorClass: timelineClass(occKind(occ)),
+                label: `${formatTime(occ.planned_at)} · ${occ.scenario_name}`,
+                timeLabel: formatTime(occ.planned_at),
+                onClick: () => this._scrollToBlock(occ),
+            };
+        })
+            .filter((e) => e !== null);
     }
-    _renderOccurrence(occ) {
-        const expanded = this._expanded.has(ViewToday._occKey(occ));
-        return b `
-      <div class="occ">
-        <div class="occ-head">
-          <span class="occ-time">${formatTime(occ.planned_at)}</span>
-          <button class="occ-name" @click=${() => this._openScenario(occ.scenario_id)}>
-            ${occ.scenario_name}
-          </button>
-          ${occ.random_offset_min
-            ? b `<span class="occ-meta"
-                >${t(this.hass, "config_panel.today_random_offset", {
-                n: occ.random_offset_min,
-            })}</span
-              >`
-            : A}
-          ${occ.retry_until
-            ? b `<span class="occ-meta"
-                >${t(this.hass, "config_panel.today_retry_until", {
-                time: formatTime(occ.retry_until),
-            })}</span
-              >`
-            : A}
-        </div>
-        ${occ.assignments.length
-            ? b `
-              <button
-                type="button"
-                class="occ-toggle"
-                aria-expanded=${expanded ? "true" : "false"}
-                @click=${() => this._toggleOcc(occ)}
-              >
-                <ha-icon
-                  icon=${expanded ? "mdi:chevron-down" : "mdi:chevron-right"}
-                ></ha-icon>
-                ${t(this.hass, "config_panel.today_cover_count", {
-                n: occ.assignments.length,
-            })}
-              </button>
-              ${expanded
-                ? b `<div class="occ-assignments">
-                    ${occ.assignments.map((run) => {
-                    const badge = runBadge(occ, run);
-                    const title = run.reason ?? "";
-                    return b `
-                        <span class="assignment-chip" title=${title}>
-                          ${run.cover_name} → ${run.target_position}%
-                          <span class="badge badge-${badge}"
-                            >${t(this.hass, `config_panel.status_${badge}`)}</span
-                          >
-                          ${run.status === "armed" && run.armed_until
-                        ? b `<span class="occ-meta"
-                                >⏳ ${formatTime(run.armed_until)}</span
-                              >`
-                        : A}
-                        </span>
-                      `;
-                })}
-                  </div>`
-                : A}
-            `
-            : b `<div class="occ-assignments">
-              <span class="muted"
-                >${t(this.hass, "config_panel.today_no_assignments")}</span
-              >
-            </div>`}
-      </div>
-    `;
+    get _phone() {
+        return this.renderRoot?.host?.clientWidth
+            ? this.renderRoot.host.clientWidth < 620
+            : window.innerWidth < 620;
     }
-    render() {
+    _renderTimelineCard() {
         const snap = this.snapshot;
-        if (!snap)
-            return A;
+        const phone = this._phone;
         return b `
       <ha-card>
         <div class="card-header">
-          <ha-icon icon="mdi:calendar-clock"></ha-icon>
-          ${t(this.hass, "config_panel.today_title")}
-          <span class="header-actions">
-            <span class="sun">
-              ☀︎↑ ${formatTime(snap.sun.sunrise)} · ☀︎↓ ${formatTime(snap.sun.sunset)}
-            </span>
-            <button
-              type="button"
-              class="btn-outline"
-              .disabled=${this._busy}
-              @click=${this._recalculate}
-            >
-              ${t(this.hass, "config_panel.today_recalculate")}
-            </button>
+          <ha-icon icon="mdi:chart-timeline-variant"></ha-icon>
+          ${t(this.hass, "config_panel.today_timeline")}
+          <span class="legend">
+            <span><span class="dot executed"></span>${t(this.hass, "config_panel.today_legend_executed")}</span>
+            <span><span class="dot will_run"></span>${t(this.hass, "config_panel.today_legend_will_run")}</span>
+            <span><span class="dot would_skip"></span>${t(this.hass, "config_panel.today_legend_would_skip")}</span>
+            <span><span class="dot skipped"></span>${t(this.hass, "config_panel.today_legend_skipped")}</span>
           </span>
         </div>
         <div class="card-content">
-          <div class="head-row">
-            <label class="master">
-              <ha-switch
-                .checked=${snap.config.enabled}
-                .disabled=${this._busy}
-                @click=${this._toggleMaster}
-              ></ha-switch>
-              ${t(this.hass, "config_panel.today_master")}
-            </label>
-          </div>
-          ${this._error ? b `<p class="error">${this._error}</p>` : A}
-          ${!snap.config.enabled
-            ? b `<p class="warning">
-                ${t(this.hass, "config_panel.today_master_off_hint")}
-              </p>`
-            : A}
-          ${this._renderTrack()}
+          ${snap.plan.length
+            ? renderTimeline({
+                events: this._timelineEvents(),
+                sunriseMin: snap.sun.sunrise ? minutesOfDay(snap.sun.sunrise) : null,
+                sunsetMin: snap.sun.sunset ? minutesOfDay(snap.sun.sunset) : null,
+                nowMin: minutesOfDay(snap.now) ?? 0,
+                showTimeLabels: !phone,
+                axisEveryH: phone ? 4 : 2,
+            })
+            : b `<p class="muted">
+                ${t(this.hass, "config_panel.today_empty_nothing_planned")}
+              </p>`}
         </div>
       </ha-card>
+    `;
+    }
+    // -------------------------------------------------------------- plan card
+    _filteredPlan() {
+        const nowMin = minutesOfDay(this.snapshot.now) ?? 0;
+        return this.snapshot.plan.filter((occ) => {
+            if (this._filter === "upcoming") {
+                return !occ.fired && (minutesOfDay(occ.planned_at) ?? -1) >= nowMin;
+            }
+            if (this._filter === "issues")
+                return occHasIssue(occ);
+            return true;
+        });
+    }
+    _renderBlockBody(occ) {
+        const scenario = this.snapshot.scenarios.find((s) => s.id === occ.scenario_id);
+        const blockedCount = occ.assignments.filter((r) => runKind(occ, r) === "blocked_safety" || r.result === "blocked_safety").length;
+        // Group runs by area.
+        const groups = new Map();
+        for (const run of occ.assignments) {
+            const key = run.area_id ?? null;
+            (groups.get(key) ?? groups.set(key, []).get(key)).push(run);
+        }
+        const orderedGroups = [...groups.entries()].sort((a, b) => this._areaName(a[0]).localeCompare(this._areaName(b[0])));
+        const conds = occ.preflight?.conditions ?? [];
+        return b `
+      <div class="block-body">
+        ${!occ.fired && conds.length
+            ? b `<div class="only-if">
+              <div class="only-if-label">
+                ${t(this.hass, "config_panel.preflight_only_if")}
+              </div>
+              ${renderCondChecklist(this.hass, conds)}
+            </div>`
+            : A}
+        <div class="covers-summary">
+          ${t(this.hass, "config_panel.today_covers_target", {
+            n: occ.assignments.length,
+            pos: scenario?.action.position ?? occ.assignments[0]?.target_position ?? 0,
+        })}
+          ${!occ.fired
+            ? b ` ·
+                ${t(this.hass, "config_panel.today_covers_split", {
+                run: occ.covers_would_run,
+                blocked: occ.assignments.length - occ.covers_would_run,
+            })}`
+            : blockedCount
+                ? b ` ·
+                  ${t(this.hass, "config_panel.today_covers_blocked", {
+                    n: blockedCount,
+                })}`
+                : A}
+        </div>
+        <div class="area-groups">
+          ${orderedGroups.map(([areaId, runs]) => b `
+              <div>
+                <div class="area-group-title">
+                  <ha-icon icon="mdi:map-marker-outline" style="--mdc-icon-size:16px"></ha-icon>
+                  ${this._areaName(areaId)}
+                  <span class="n">${runs.length}</span>
+                </div>
+                ${runs.map((run) => this._renderCoverLine(occ, run))}
+              </div>
+            `)}
+        </div>
+      </div>
+    `;
+    }
+    _renderCoverLine(occ, run) {
+        const kind = runKind(occ, run);
+        const safety = (run.preflight?.conditions ?? []).find((c) => c.scope === "safety" && c.ok === false);
+        const cover = this.snapshot.covers.find((c) => c.id === run.cover_item_id);
+        return b `
+      <div class="cover-line">
+        <span class="cover-dot ${kind}"></span>
+        <span class="ellipsis">${run.cover_name}</span>
+        <span class="cover-target">${run.target_position}%</span>
+      </div>
+      ${safety
+            ? b `<div class="cover-safety">
+            <ha-icon icon="mdi:alert-outline"></ha-icon>
+            <span>
+              ${cover?.name}:
+              ${t(this.hass, "config_panel.cond_sum_safety", {
+                ventilation: cover?.safety.ventilation_position ?? 20,
+            })}
+            </span>
+          </div>`
+            : A}
+    `;
+    }
+    _renderBlock(occ) {
+        const kind = occKind(occ);
+        const expanded = this._isExpanded(occ);
+        const reason = !occ.fired ? preflightReason(this.hass, occ.preflight) : null;
+        return b `
+      <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
+        <button
+          type="button"
+          class="block-head"
+          aria-expanded=${expanded ? "true" : "false"}
+          @click=${() => this._toggleOcc(occ)}
+        >
+          <span class="block-time">${formatTime(occ.planned_at)}</span>
+          <span class="block-titles">
+            <span class="block-line1">
+              <span class="block-name ellipsis">${occ.scenario_name}</span>
+              ${occ.random_offset_min
+            ? b `<span class="block-offset"
+                    >${t(this.hass, "config_panel.today_random_offset", {
+                n: occ.random_offset_min,
+            })}</span
+                  >`
+            : A}
+              ${occ.fired
+            ? this._renderResultBadge(occ)
+            : preflightBadge(this.hass, occ.preflight)}
+              ${occ.fired &&
+            occ.assignments.some((r) => r.status === "armed") &&
+            occ.retry_until
+            ? b `<span class="block-offset"
+                    >${t(this.hass, "config_panel.today_armed_until", {
+                time: formatTime(occ.retry_until),
+            })}</span
+                  >`
+            : A}
+            </span>
+            ${reason && !expanded
+            ? b `<span class="block-reason">${reason}</span>`
+            : A}
+          </span>
+          <button
+            type="button"
+            class="iconbtn block-edit"
+            aria-label=${t(this.hass, "config_panel.scenarios_edit")}
+            title=${t(this.hass, "config_panel.scenarios_edit")}
+            @click=${(e) => {
+            e.stopPropagation();
+            this._openScenario(occ.scenario_id);
+        }}
+          >
+            <ha-icon icon="mdi:pencil-outline"></ha-icon>
+          </button>
+          <ha-icon
+            class="block-chevron"
+            icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+          ></ha-icon>
+        </button>
+        ${expanded && occ.assignments.length ? this._renderBlockBody(occ) : A}
+        ${expanded && !occ.assignments.length
+            ? b `<div class="block-body">
+              <p class="muted">${t(this.hass, "config_panel.today_no_assignments")}</p>
+            </div>`
+            : A}
+      </div>
+    `;
+    }
+    _renderResultBadge(occ) {
+        const kind = occKind(occ);
+        return b `<span class="badge badge-${kind}"
+      >${t(this.hass, `config_panel.status_${kind}`)}</span
+    >`;
+    }
+    _renderPlanCard() {
+        const snap = this.snapshot;
+        const issues = snap.plan.filter(occHasIssue).length;
+        const filtered = this._filteredPlan();
+        return b `
       <ha-card>
         <div class="card-header">
-          <ha-icon icon="mdi:format-list-bulleted"></ha-icon>
+          <ha-icon icon="mdi:format-list-checks"></ha-icon>
           ${t(this.hass, "config_panel.today_plan_title")}
         </div>
         <div class="card-content">
-          <p class="intro">${t(this.hass, "config_panel.today_intro")}</p>
-          ${renderHelp(this.hass, "today_statuses")}
-          ${snap.plan.length
-            ? snap.plan.map((occ) => this._renderOccurrence(occ))
+          <div class="plan-toolbar">
+            <div class="segmented">
+              ${["all", "upcoming", "issues"].map((f) => b `
+                  <button
+                    type="button"
+                    class=${this._filter === f ? "selected" : ""}
+                    @click=${() => {
+            this._filter = f;
+            this.requestUpdate();
+        }}
+                  >
+                    ${t(this.hass, `config_panel.today_filter_${f}`)}
+                    ${f === "issues" && issues
+            ? b `<span class="count">${issues}</span>`
+            : A}
+                  </button>
+                `)}
+            </div>
+            ${renderHelp(this.hass, "today_statuses")}
+          </div>
+          <p class="intro">
+            ${t(this.hass, "config_panel.today_plan_intro")}
+            ${t(this.hass, "config_panel.preflight_evaluated_at", {
+            time: formatTime(snap.now),
+        })}
+          </p>
+          ${filtered.length
+            ? filtered.map((occ) => this._renderBlock(occ))
             : b `<div class="empty-state">
                 <ha-icon icon="mdi:calendar-blank-outline"></ha-icon>
                 <p>
@@ -3453,10 +5523,18 @@ class ViewToday extends i {
       </ha-card>
     `;
     }
+    render() {
+        if (!this.snapshot)
+            return A;
+        return b `
+      ${this._renderStatusCard()} ${this._renderTimelineCard()}
+      ${this._renderPlanCard()}
+    `;
+    }
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.2.0";
+const VERSION = "0.4.0";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

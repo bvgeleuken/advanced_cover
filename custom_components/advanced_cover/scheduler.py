@@ -130,6 +130,7 @@ class AssignmentRun:
     cover_name: str
     target_position: int
     target_tilt: int | None = None
+    area_id: str | None = None
     status: str = RUN_STATE_IDLE
     result: str | None = None
     reason: str | None = None
@@ -144,6 +145,7 @@ class AssignmentRun:
             "cover_name": self.cover_name,
             "target_position": self.target_position,
             "target_tilt": self.target_tilt,
+            "area_id": self.area_id,
             "status": self.status,
             "result": self.result,
             "reason": self.reason,
@@ -303,6 +305,7 @@ class AdvancedCoverScheduler:
                         cover_name=cover.name,
                         target_position=action.position,
                         target_tilt=action.tilt_position,
+                        area_id=cover.area_id,
                     )
                 plan.append(occ)
 

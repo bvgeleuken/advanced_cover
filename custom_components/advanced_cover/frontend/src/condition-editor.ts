@@ -79,12 +79,12 @@ function renderStateChips(
         (s) => html`
           <button
             type="button"
-            class="chip selected"
+            class="chip selected chip-removable"
             title=${t(opts.hass, "config_panel.cond_remove_state")}
             @click=${() =>
               update(opts, index, { states: states.filter((x) => x !== s) })}
           >
-            ${s} ✕
+            ${s} <ha-icon icon="mdi:close"></ha-icon>
           </button>
         `
       )}
@@ -258,7 +258,7 @@ function renderCondition(
         title=${t(hass, "config_panel.cond_remove")}
         @click=${() => remove(opts, index)}
       >
-        ✕
+        <ha-icon icon="mdi:close"></ha-icon>
       </button>
     </div>
   `;
@@ -295,7 +295,7 @@ export function renderConditionEditor(
           }}
         >
           <option value="">
-            ＋ ${t(hass, "config_panel.cond_add")}
+            + ${t(hass, "config_panel.cond_add")}
           </option>
           ${types.map(
             (ct) => html`

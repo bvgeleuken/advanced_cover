@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from .const import (
     COND_CONTACT,
@@ -20,6 +21,8 @@ from .const import (
     COND_ENTITY_STATE,
     COND_ENTITY_STATE_NOT,
     COND_NUMERIC_STATE,
+    CONTACT_OPEN,
+    CONTACT_TILTED,
     CONTACT_UNKNOWN,
     POSITION_OP_ABOVE,
     POSITION_OP_BELOW,
@@ -204,4 +207,261 @@ def evaluate_conditions(
         passed=not failed_reasons,
         failed_reasons=failed_reasons,
         rearm_entity_ids=rearm,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Preflight: per-condition evaluation for the live "would run / would skip"
+# display in the panel. Verdict (ok) comes from the very same primitives the
+# trigger path uses (``evaluate_condition``), so the two never diverge.
+# ---------------------------------------------------------------------------
+
+# scope values
+SCOPE_SCENARIO = "scenario"
+SCOPE_ASSIGNMENT = "assignment"
+SCOPE_SAFETY = "safety"
+
+# rollup verdicts
+VERDICT_WOULD_RUN = "would_run"
+VERDICT_WOULD_SKIP = "would_skip"
+VERDICT_UNKNOWN = "unknown"
+
+# i18n summary keys (rendered in the frontend via IntlMessageFormat)
+_SUM_ENTITY_STATE = "config_panel.cond_sum_entity_state"
+_SUM_ENTITY_STATE_NOT = "config_panel.cond_sum_entity_state_not"
+_SUM_COVER_POSITION = "config_panel.cond_sum_cover_position"
+_SUM_CONTACT = "config_panel.cond_sum_contact"
+_SUM_NUMERIC = "config_panel.cond_sum_numeric"
+_SUM_SAFETY = "config_panel.cond_sum_safety"
+_SUM_UNAVAILABLE = "config_panel.cond_sum_unavailable"
+_SUM_AUTOMATION_DISABLED = "config_panel.cond_sum_automation_disabled"
+_SUM_INVALID = "config_panel.cond_sum_invalid"
+
+
+@dataclass
+class ConditionEval:
+    """One evaluated condition, ready to render as a checklist line."""
+
+    scope: str
+    type: str
+    entity_id: str | None
+    ok: bool | None  # None = cannot be evaluated (unavailable / missing)
+    actual: str | None
+    summary_key: str
+    summary_values: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for the WebSocket API."""
+        return {
+            "scope": self.scope,
+            "type": self.type,
+            "entity_id": self.entity_id,
+            "ok": self.ok,
+            "actual": self.actual,
+            "summary_key": self.summary_key,
+            "summary_values": dict(self.summary_values),
+        }
+
+
+def _condition_actual(
+    cond: Condition, get_state: GetState, cover: CoverContext
+) -> str | None:
+    """Raw current value of the entity/quantity a condition looks at."""
+    if cond.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT, COND_NUMERIC_STATE):
+        return get_state(cond.entity_id) if cond.entity_id else None
+    if cond.type == COND_COVER_POSITION:
+        return None if cover.position is None else str(cover.position)
+    if cond.type == COND_CONTACT:
+        return cover.contact
+    return None
+
+
+def _condition_unavailable(
+    cond: Condition, get_state: GetState, cover: CoverContext
+) -> bool:
+    """Return True when a condition cannot be evaluated (missing value)."""
+    if cond.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT, COND_NUMERIC_STATE):
+        if not cond.entity_id:
+            return True
+        return get_state(cond.entity_id) in _UNUSABLE_STATES
+    if cond.type == COND_COVER_POSITION:
+        return cover.position is None
+    if cond.type == COND_CONTACT:
+        return cover.contact_entity_id is None or cover.contact == CONTACT_UNKNOWN
+    return False
+
+
+def _op_and_value(cond: Condition) -> tuple[str, str]:
+    """Human-oriented (operator, value) pair for cover/numeric summaries."""
+    if cond.type == COND_COVER_POSITION:
+        if cond.op == POSITION_OP_BETWEEN and cond.value is not None:
+            low, high = sorted((cond.value, cond.value2 or cond.value))
+            return POSITION_OP_BETWEEN, f"{low:g}-{high:g}"
+        return cond.op, f"{cond.value:g}" if cond.value is not None else "?"
+    # numeric_state
+    if cond.above is not None and cond.below is not None:
+        return POSITION_OP_BETWEEN, f"{cond.above:g}-{cond.below:g}"
+    if cond.above is not None:
+        return POSITION_OP_ABOVE, f"{cond.above:g}"
+    if cond.below is not None:
+        return POSITION_OP_BELOW, f"{cond.below:g}"
+    return "?", "?"
+
+
+def _summary_for(
+    cond: Condition, actual: str | None, *, unavailable: bool
+) -> tuple[str, dict[str, Any]]:
+    """Build (summary_key, values) for a condition's checklist line."""
+    if unavailable:
+        return _SUM_UNAVAILABLE, {"entity": cond.entity_id or "?"}
+    if cond.type == COND_ENTITY_STATE:
+        return _SUM_ENTITY_STATE, {
+            "entity": cond.entity_id or "?",
+            "actual": actual or "?",
+            "expected": ", ".join(cond.states),
+        }
+    if cond.type == COND_ENTITY_STATE_NOT:
+        return _SUM_ENTITY_STATE_NOT, {
+            "entity": cond.entity_id or "?",
+            "expected": ", ".join(cond.states),
+        }
+    if cond.type == COND_COVER_POSITION:
+        op, value = _op_and_value(cond)
+        return _SUM_COVER_POSITION, {
+            "actual": actual or "?",
+            "op": op,
+            "value": value,
+        }
+    if cond.type == COND_CONTACT:
+        return _SUM_CONTACT, {
+            "actual": actual or "?",
+            "expected": ", ".join(cond.accepted),
+        }
+    if cond.type == COND_NUMERIC_STATE:
+        op, value = _op_and_value(cond)
+        return _SUM_NUMERIC, {
+            "entity": cond.entity_id or "?",
+            "actual": actual or "?",
+            "op": op,
+            "value": value,
+        }
+    return _SUM_INVALID, {}
+
+
+def evaluate_condition_eval(
+    cond: Condition, get_state: GetState, cover: CoverContext, scope: str
+) -> ConditionEval:
+    """Evaluate one condition into a render-ready :class:`ConditionEval`.
+
+    ``ok`` uses the exact same primitive as the trigger path
+    (:func:`evaluate_condition`): ``None`` reason means pass. A failure is
+    reported as ``ok is None`` when the value is simply unavailable, else
+    ``ok is False``.
+    """
+    reason = evaluate_condition(cond, get_state, cover)
+    unavailable = _condition_unavailable(cond, get_state, cover)
+    ok: bool | None
+    if reason is None:
+        ok = True
+    elif unavailable:
+        ok = None
+    else:
+        ok = False
+    actual = _condition_actual(cond, get_state, cover)
+    summary_key, summary_values = _summary_for(cond, actual, unavailable=ok is None)
+    entity_id = cover.contact_entity_id if cond.type == COND_CONTACT else cond.entity_id
+    return ConditionEval(
+        scope=scope,
+        type=cond.type,
+        entity_id=entity_id,
+        ok=ok,
+        actual=actual,
+        summary_key=summary_key,
+        summary_values=summary_values,
+    )
+
+
+def evaluate_conditions_detailed(
+    conditions: list[Condition],
+    get_state: GetState,
+    cover: CoverContext,
+    scope: str,
+) -> list[ConditionEval]:
+    """Render-ready evaluation of a condition list (same merge as the engine)."""
+    return [
+        evaluate_condition_eval(cond, get_state, cover, scope)
+        for cond in _merge_entity_state_conditions(conditions)
+    ]
+
+
+def safety_would_block(
+    *,
+    contact: str,
+    block_when_tilted: bool,
+    ventilation_position: int,
+    target_position: int,
+    current_position: int | None,
+) -> bool:
+    """Whether the safety rule would block this closing move right now.
+
+    Mirrors :meth:`executor.CoverExecutor._apply_safety` as a pure predicate
+    so the preflight matches what execution would do (fail-safe: an unknown
+    current position counts as a closing move).
+    """
+    blocking = contact == CONTACT_OPEN or (
+        contact == CONTACT_TILTED and block_when_tilted
+    )
+    if not blocking:
+        return False
+    if target_position >= ventilation_position:
+        return False
+    # Fail-safe: an unknown current position counts as a closing move.
+    return not (current_position is not None and target_position >= current_position)
+
+
+def rollup_preflight(evals: list[ConditionEval], evaluated_at: str) -> dict[str, Any]:
+    """Roll a list of :class:`ConditionEval` up into a Preflight dict.
+
+    - any ``ok is False``  → ``would_skip``
+    - else any ``ok is None`` → ``unknown``
+    - else (incl. empty)   → ``would_run``
+    """
+    failing = sum(1 for e in evals if e.ok is False)
+    if failing:
+        verdict = VERDICT_WOULD_SKIP
+    elif any(e.ok is None for e in evals):
+        verdict = VERDICT_UNKNOWN
+    else:
+        verdict = VERDICT_WOULD_RUN
+    return {
+        "verdict": verdict,
+        "evaluated_at": evaluated_at,
+        "failing": failing,
+        "conditions": [e.to_dict() for e in evals],
+    }
+
+
+def disabled_condition_eval(scope: str) -> ConditionEval:
+    """Return a synthetic failing condition for a disabled master/cover switch."""
+    return ConditionEval(
+        scope=scope,
+        type="automation_disabled",
+        entity_id=None,
+        ok=False,
+        actual=None,
+        summary_key=_SUM_AUTOMATION_DISABLED,
+        summary_values={},
+    )
+
+
+def safety_condition_eval(*, blocked: bool, ventilation_position: int) -> ConditionEval:
+    """Return a ConditionEval line for the per-cover safety rule."""
+    return ConditionEval(
+        scope=SCOPE_SAFETY,
+        type="safety_rule",
+        entity_id=None,
+        ok=not blocked,
+        actual=None,
+        summary_key=_SUM_SAFETY,
+        summary_values={"ventilation": ventilation_position},
     )

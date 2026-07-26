@@ -75,6 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     await scheduler.async_setup()
+    coordinator.async_setup_state_tracking()
 
     if not hass.data.get(WEBSOCKET_REGISTERED_KEY):
         from .websocket import async_register_websocket_api
@@ -122,6 +123,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if domain_data:
         scheduler: AdvancedCoverScheduler = domain_data["scheduler"]
         await scheduler.async_shutdown()
+        domain_data["coordinator"].async_shutdown_state_tracking()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok and entry.entry_id in hass.data.get(DOMAIN, {}):

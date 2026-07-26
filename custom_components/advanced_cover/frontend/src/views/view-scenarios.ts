@@ -17,12 +17,15 @@ import {
 import { renderHelp } from "../help";
 import { t } from "../i18n";
 import { stripEditScenarioQueryFromUrl } from "../navigation";
+import { preflightBadge } from "../preflight";
 import { sharedStyles } from "../styles";
 import type {
   ActionOverride,
   Assignment,
+  Condition,
   CoverRuntime,
   HomeAssistant,
+  Occurrence,
   PanelSnapshot,
   Scenario,
 } from "../types";
@@ -31,12 +34,26 @@ const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const RANDOM_WINDOWS = [0, 15, 30, 60];
 const RETRY_WINDOWS = [0, 60, 120, 240, 480];
 
+const DAYPART_ICONS: Record<string, string> = {
+  night: "mdi:weather-night",
+  morning: "mdi:weather-sunset-up",
+  forenoon: "mdi:weather-partly-cloudy",
+  noon: "mdi:weather-sunny",
+  afternoon: "mdi:weather-partly-cloudy",
+  evening: "mdi:weather-sunset",
+};
+
 function emptyScenario(): Scenario {
   return {
     id: "",
     name: "",
     enabled: true,
-    trigger: { type: "fixed_time", time_local: "07:00", sun_event: "sunset", offset_min: 0 },
+    trigger: {
+      type: "fixed_time",
+      time_local: "07:00",
+      sun_event: "sunset",
+      offset_min: 0,
+    },
     random_window_min: 0,
     random_direction: "both",
     weekdays: [...WEEKDAYS],
@@ -62,7 +79,6 @@ export class ViewScenarios extends LitElement {
   hass!: HomeAssistant;
   entryId!: string;
   snapshot!: PanelSnapshot;
-  /** Deep link: open this scenario's editor once (from ?editScenario=). */
   editScenarioId?: string;
 
   private _error?: string;
@@ -71,48 +87,100 @@ export class ViewScenarios extends LitElement {
   private _draft: Scenario | null = null;
   private _runIgnoreConditions = false;
   private _openedDeepLink?: string;
+  private _dragIndex: number | null = null;
+  private _dragOverIndex: number | null = null;
+  private _runPopoverId: string | null = null;
+  private _menuOpenId: string | null = null;
 
   static styles = [
     sharedStyles,
     css`
-      .order-buttons {
+      .srow {
         display: flex;
-        flex-direction: column;
-        gap: 2px;
+        align-items: stretch;
+        border: 1px solid var(--divider-color);
+        border-left: 3px solid var(--primary-color);
+        border-radius: 10px;
+        margin-bottom: 8px;
+        background: var(--card-background-color);
       }
-      .order-buttons button {
-        padding: 2px 8px;
-        line-height: 1;
+      .srow.inactive {
+        border-left-color: var(--disabled-text-color, #6d7476);
       }
-      .daypart {
+      .srow.dragover {
+        box-shadow: 0 -2px 0 0 var(--primary-color);
+      }
+      .drag-handle {
+        display: flex;
+        align-items: center;
+        padding: 0 4px 0 8px;
+        color: var(--secondary-text-color);
+        cursor: grab;
+      }
+      .drag-handle ha-icon {
+        --mdc-icon-size: 20px;
+      }
+      .srow-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px 10px 4px;
+        flex-wrap: wrap;
+      }
+      .srow-main {
+        flex: 1;
+        min-width: 160px;
+      }
+      .srow-name {
         display: flex;
         align-items: center;
         gap: 8px;
+        font-weight: 600;
+        font-size: 1rem;
+      }
+      .srow-name .ellipsis {
+        min-width: 0;
+      }
+      .srow-meta {
+        font-size: 0.82rem;
+        color: var(--secondary-text-color);
+        margin-top: 2px;
+      }
+      .cond-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
         margin-top: 6px;
+      }
+      .cond-chip {
+        font-size: 0.74rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(0, 0, 0, 0.05));
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+      }
+      .srow-daypart {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 210px;
+        flex-shrink: 0;
         font-size: 0.78rem;
         color: var(--secondary-text-color);
       }
-      .daypart-emoji {
-        font-size: 0.95rem;
-        line-height: 1;
-      }
-      .daypart-label {
-        min-width: 5.5em;
+      .srow-daypart ha-icon {
+        --mdc-icon-size: 18px;
       }
       .daybar {
         position: relative;
         flex: 1;
-        max-width: 200px;
         height: 6px;
         border-radius: 3px;
-        background: linear-gradient(
-          90deg,
-          rgba(63, 81, 181, 0.28) 0%,
-          rgba(255, 193, 7, 0.32) 25%,
-          rgba(255, 235, 59, 0.42) 50%,
-          rgba(255, 152, 0, 0.32) 75%,
-          rgba(63, 81, 181, 0.28) 100%
-        );
+        border: 1px solid var(--divider-color);
+        box-sizing: border-box;
       }
       .daybar-marker {
         position: absolute;
@@ -123,7 +191,98 @@ export class ViewScenarios extends LitElement {
         border-radius: 50%;
         background: var(--primary-color);
         border: 1.5px solid var(--card-background-color);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+      }
+      .srow-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        position: relative;
+      }
+      .warn-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--warning-color, #f0b23a);
+        font-size: 0.8rem;
+        margin-top: 4px;
+      }
+      .warn-line ha-icon {
+        --mdc-icon-size: 16px;
+      }
+      /* Popover (run confirm / overflow menu). */
+      .popover {
+        position: absolute;
+        top: 44px;
+        right: 0;
+        z-index: 5;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 10px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+        padding: 12px;
+        min-width: 200px;
+      }
+      .popover .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 0.88rem;
+        padding: 8px 6px;
+        cursor: pointer;
+        border-radius: 6px;
+        text-align: left;
+      }
+      .popover .menu-item:hover {
+        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+      }
+      .popover .menu-item.danger {
+        color: var(--error-color);
+      }
+      .popover ha-icon {
+        --mdc-icon-size: 18px;
+      }
+      /* Editor dialog sticky frame. */
+      .dialog.sticky {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        max-height: 92vh;
+        max-width: 760px;
+      }
+      .dialog-head {
+        position: sticky;
+        top: 0;
+        background: var(--card-background-color);
+        padding: 18px 24px 12px;
+        border-bottom: 1px solid var(--divider-color);
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .dialog-head h3 {
+        margin: 0;
+        flex: 1;
+      }
+      .dialog-scroll {
+        overflow-y: auto;
+        padding: 12px 24px;
+      }
+      .dialog-foot {
+        position: sticky;
+        bottom: 0;
+        background: var(--card-background-color);
+        padding: 12px 24px;
+        border-top: 1px solid var(--divider-color);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .seg {
         display: inline-flex;
@@ -195,6 +354,31 @@ export class ViewScenarios extends LitElement {
       }
       .quick-add .chip {
         white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .quick-add .chip ha-icon {
+        --mdc-icon-size: 15px;
+      }
+
+      @container acview (max-width: 900px) {
+        .srow-daypart {
+          width: 100%;
+          order: 5;
+        }
+      }
+      @container acview (max-width: 620px) {
+        .srow-body {
+          gap: 8px;
+        }
+        .srow-actions {
+          width: 100%;
+          justify-content: flex-start;
+          border-top: 1px solid var(--divider-color);
+          padding-top: 6px;
+          margin-top: 2px;
+        }
       }
     `,
   ];
@@ -210,9 +394,7 @@ export class ViewScenarios extends LitElement {
       );
       this._openedDeepLink = this.editScenarioId;
       stripEditScenarioQueryFromUrl();
-      if (scenario) {
-        this._openEdit(scenario);
-      }
+      if (scenario) this._openEdit(scenario);
     }
   }
 
@@ -228,6 +410,10 @@ export class ViewScenarios extends LitElement {
     return this.hass.areas?.[areaId]?.name ?? areaId;
   }
 
+  private _occFor(s: Scenario): Occurrence | undefined {
+    return this.snapshot.plan.find((o) => o.scenario_id === s.id);
+  }
+
   private _triggerSummary(s: Scenario): string {
     const trig =
       s.trigger.type === "fixed_time"
@@ -237,31 +423,40 @@ export class ViewScenarios extends LitElement {
               ? ` ${s.trigger.offset_min > 0 ? "+" : ""}${s.trigger.offset_min} min`
               : ""
           }`;
-    const random = s.random_window_min
-      ? ` ± ${s.random_window_min} min`
-      : "";
+    const random = s.random_window_min ? ` ± ${s.random_window_min} min` : "";
     const days =
       s.weekdays.length === 7
         ? t(this.hass, "config_panel.weekdays_all")
-        : s.weekdays
-            .map((d) => t(this.hass, `config_panel.weekday_${d}`))
-            .join(" ");
+        : s.weekdays.map((d) => t(this.hass, `config_panel.weekday_${d}`)).join(" ");
     return `${trig}${random} · ${days}`;
   }
 
-  private _todayTime(s: Scenario): string | null {
-    const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
-    return occ ? formatTime(occ.planned_at) : null;
+  private _condChipText(cond: Condition): string {
+    const e = cond.entity_id ?? "";
+    switch (cond.type) {
+      case "entity_state":
+        return `${e} = ${(cond.states ?? []).join("/")}`;
+      case "entity_state_not":
+        return `${e} ≠ ${(cond.states ?? []).join("/")}`;
+      case "numeric_state":
+        return `${e} ${cond.above != null ? `> ${cond.above}` : ""}${
+          cond.below != null ? ` < ${cond.below}` : ""
+        }`.trim();
+      case "cover_position":
+        return `${t(this.hass, "config_panel.scenarios_position")} ${cond.op} ${cond.value}%`;
+      case "contact":
+        return `${t(this.hass, "config_panel.cond_type_contact")}: ${(
+          cond.accepted ?? []
+        )
+          .map((s) => t(this.hass, `config_panel.contact_${s}`))
+          .join("/")}`;
+      default:
+        return "";
+    }
   }
 
-  /**
-   * Approximate minute-of-day this scenario fires, for the time-of-day bar.
-   * Prefers today's computed occurrence (real sun times + offset); otherwise
-   * derives it from the trigger definition so disabled/off-day scenarios still
-   * show where in the day they belong.
-   */
   private _scenarioMinute(s: Scenario): number | null {
-    const occ = this.snapshot.plan.find((o) => o.scenario_id === s.id);
+    const occ = this._occFor(s);
     if (occ) {
       const m = minutesOfDay(occ.planned_at);
       if (m != null) return m;
@@ -285,36 +480,44 @@ export class ViewScenarios extends LitElement {
     return (((base + (s.trigger.offset_min ?? 0)) % 1440) + 1440) % 1440;
   }
 
-  /** Map a minute-of-day to a coarse daypart with an emoji sun-position hint. */
-  private _dayPart(min: number): { key: string; emoji: string } {
-    if (min < 5 * 60) return { key: "night", emoji: "🌙" };
-    if (min < 9 * 60) return { key: "morning", emoji: "🌅" };
-    if (min < 12 * 60) return { key: "forenoon", emoji: "🌤️" };
-    if (min < 14 * 60) return { key: "noon", emoji: "☀️" };
-    if (min < 18 * 60) return { key: "afternoon", emoji: "⛅" };
-    if (min < 21 * 60) return { key: "evening", emoji: "🌇" };
-    return { key: "night", emoji: "🌙" };
+  private _dayPart(min: number): string {
+    if (min < 5 * 60) return "night";
+    if (min < 9 * 60) return "morning";
+    if (min < 12 * 60) return "forenoon";
+    if (min < 14 * 60) return "noon";
+    if (min < 18 * 60) return "afternoon";
+    if (min < 21 * 60) return "evening";
+    return "night";
+  }
+
+  private _sunGradient(): string {
+    const night = "color-mix(in srgb, var(--primary-text-color) 10%, var(--card-background-color))";
+    const day = "color-mix(in srgb, var(--warning-color, #f0b23a) 20%, var(--card-background-color))";
+    const sr = this.snapshot.sun.sunrise
+      ? minutesOfDay(this.snapshot.sun.sunrise)
+      : null;
+    const ss = this.snapshot.sun.sunset
+      ? minutesOfDay(this.snapshot.sun.sunset)
+      : null;
+    if (sr == null || ss == null || sr >= ss) return night;
+    const p = (m: number) => Math.max(0, Math.min(100, (m / 1440) * 100));
+    const a = p(sr);
+    const b = p(ss);
+    const f = 3;
+    return `linear-gradient(90deg, ${night} 0%, ${night} ${Math.max(0, a - f)}%, ${day} ${a + f}%, ${day} ${Math.max(a + f, b - f)}%, ${night} ${b + f}%, ${night} 100%)`;
   }
 
   private _renderDaypart(s: Scenario) {
     const min = this._scenarioMinute(s);
     if (min == null) return nothing;
-    const part = this._dayPart(min);
-    const label = t(this.hass, `config_panel.scenarios_daypart_${part.key}`);
+    const key = this._dayPart(min);
+    const label = t(this.hass, `config_panel.scenarios_daypart_${key}`);
     return html`
-      <div
-        class="daypart"
-        title="${label} · ${String(Math.floor(min / 60)).padStart(2, "0")}:${String(
-          min % 60
-        ).padStart(2, "0")}"
-      >
-        <span class="daypart-emoji">${part.emoji}</span>
-        <span class="daypart-label">${label}</span>
-        <div class="daybar">
-          <div
-            class="daybar-marker"
-            style="left:${(min / 1440) * 100}%"
-          ></div>
+      <div class="srow-daypart">
+        <ha-icon icon=${DAYPART_ICONS[key]}></ha-icon>
+        <span>${label}</span>
+        <div class="daybar" style="background:${this._sunGradient()}">
+          <div class="daybar-marker" style="left:${(min / 1440) * 100}%"></div>
         </div>
       </div>
     `;
@@ -339,6 +542,7 @@ export class ViewScenarios extends LitElement {
     this._draft = JSON.parse(JSON.stringify(scenario)) as Scenario;
     this._error = undefined;
     this._warnings = scenario.warnings ?? [];
+    this._menuOpenId = null;
     this.requestUpdate();
   }
 
@@ -349,6 +553,7 @@ export class ViewScenarios extends LitElement {
     this._draft = copy;
     this._error = undefined;
     this._warnings = [];
+    this._menuOpenId = null;
     this.requestUpdate();
   }
 
@@ -380,11 +585,10 @@ export class ViewScenarios extends LitElement {
   }
 
   private async _delete(scenario: Scenario): Promise<void> {
+    this._menuOpenId = null;
     if (
       !window.confirm(
-        t(this.hass, "config_panel.scenarios_delete_confirm", {
-          name: scenario.name,
-        })
+        t(this.hass, "config_panel.scenarios_delete_confirm", { name: scenario.name })
       )
     ) {
       return;
@@ -401,6 +605,7 @@ export class ViewScenarios extends LitElement {
   private async _toggleEnabled(scenario: Scenario): Promise<void> {
     try {
       const { warnings, ...payload } = scenario;
+      void warnings;
       await saveScenario(this.hass, this.entryId, {
         ...payload,
         enabled: !scenario.enabled,
@@ -411,12 +616,7 @@ export class ViewScenarios extends LitElement {
     }
   }
 
-  private async _move(scenario: Scenario, delta: number): Promise<void> {
-    const ids = this.snapshot.scenarios.map((s) => s.id);
-    const idx = ids.indexOf(scenario.id);
-    const target = idx + delta;
-    if (idx < 0 || target < 0 || target >= ids.length) return;
-    [ids[idx], ids[target]] = [ids[target], ids[idx]];
+  private async _reorder(ids: string[]): Promise<void> {
     try {
       await reorderScenarios(this.hass, this.entryId, ids);
     } catch (e) {
@@ -425,7 +625,30 @@ export class ViewScenarios extends LitElement {
     }
   }
 
+  private async _move(index: number, delta: number): Promise<void> {
+    const ids = this.snapshot.scenarios.map((s) => s.id);
+    const target = index + delta;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await this._reorder(ids);
+  }
+
+  private async _onDrop(dropIndex: number): Promise<void> {
+    const from = this._dragIndex;
+    this._dragIndex = null;
+    this._dragOverIndex = null;
+    if (from == null || from === dropIndex) {
+      this.requestUpdate();
+      return;
+    }
+    const ids = this.snapshot.scenarios.map((s) => s.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(dropIndex, 0, moved);
+    await this._reorder(ids);
+  }
+
   private async _runNow(scenarioId: string): Promise<void> {
+    this._runPopoverId = null;
     this._busy = true;
     this.requestUpdate();
     try {
@@ -443,55 +666,241 @@ export class ViewScenarios extends LitElement {
 
   // ---------------------------------------------------------------- rendering
 
+  private _renderResultBadge(occ: Occurrence) {
+    const runs = occ.assignments;
+    let key: string;
+    if (runs.length && runs.every((r) => r.result === "executed"))
+      key = "scenarios_result_done";
+    else if (runs.some((r) => r.result === "executed"))
+      key = "scenarios_result_partial";
+    else key = "scenarios_result_skipped";
+    return html`<span class="badge">${t(this.hass, `config_panel.${key}`)}</span>`;
+  }
+
+  private _renderBadge(s: Scenario) {
+    if (!s.enabled) {
+      return html`<span class="badge">${t(this.hass, "config_panel.scenarios_disabled_off")}</span>`;
+    }
+    const occ = this._occFor(s);
+    if (!occ) return nothing;
+    if (occ.fired) return this._renderResultBadge(occ);
+    return preflightBadge(this.hass, occ.preflight);
+  }
+
   private _renderRow(scenario: Scenario, index: number, total: number) {
-    const today = this._todayTime(scenario);
+    const occ = this._occFor(scenario);
+    const conds = scenario.conditions;
+    const shownConds = conds.slice(0, 2);
+    const dragover = this._dragOverIndex === index;
     return html`
-      <div class="list-row-wrap">
-        <div class="list-row-accent ${scenario.enabled ? "" : "inactive"}"></div>
-        <div class="list-row">
-          <div class="order-buttons">
-            <button class="btn-icon" .disabled=${index === 0}
-              title=${t(this.hass, "config_panel.scenarios_move_up")}
-              @click=${() => this._move(scenario, -1)}>▲</button>
-            <button class="btn-icon" .disabled=${index === total - 1}
-              title=${t(this.hass, "config_panel.scenarios_move_down")}
-              @click=${() => this._move(scenario, 1)}>▼</button>
-          </div>
+      <div
+        class="srow ${scenario.enabled ? "" : "inactive"} ${dragover ? "dragover" : ""}"
+        @dragover=${(e: DragEvent) => {
+          e.preventDefault();
+          if (this._dragOverIndex !== index) {
+            this._dragOverIndex = index;
+            this.requestUpdate();
+          }
+        }}
+        @drop=${() => this._onDrop(index)}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.altKey && e.key === "ArrowUp") {
+            e.preventDefault();
+            this._move(index, -1);
+          } else if (e.altKey && e.key === "ArrowDown") {
+            e.preventDefault();
+            this._move(index, 1);
+          }
+        }}
+        tabindex="0"
+      >
+        <div
+          class="drag-handle"
+          draggable="true"
+          title=${t(this.hass, "config_panel.scenarios_drag_handle")}
+          @dragstart=${() => {
+            this._dragIndex = index;
+          }}
+          @dragend=${() => {
+            this._dragIndex = null;
+            this._dragOverIndex = null;
+            this.requestUpdate();
+          }}
+        >
+          <ha-icon icon="mdi:drag"></ha-icon>
+        </div>
+        <div class="srow-body">
           <ha-switch
             .checked=${scenario.enabled}
             @click=${() => this._toggleEnabled(scenario)}
           ></ha-switch>
-          <div class="list-main">
-            <p class="list-name">${scenario.name}</p>
-            <p class="list-detail">
+          <div class="srow-main">
+            <div class="srow-name">
+              <span class="ellipsis">${scenario.name}</span>
+              ${this._renderBadge(scenario)}
+            </div>
+            <div class="srow-meta">
               ${this._triggerSummary(scenario)} ·
               ${t(this.hass, "config_panel.scenarios_covers_count", {
                 n: scenario.assignments.length,
               })}
-              ${today
-                ? html` · ${t(this.hass, "config_panel.scenarios_today_at", {
-                    time: today,
-                  })}`
-                : nothing}
               → ${scenario.action.position}%
-            </p>
-            ${this._renderDaypart(scenario)}
+              ${occ
+                ? html` · ${t(this.hass, "config_panel.scenarios_today_at", {
+                    time: formatTime(occ.planned_at),
+                  })}`
+                : !scenario.enabled
+                  ? html` · ${t(this.hass, "config_panel.scenarios_not_in_plan")}`
+                  : nothing}
+            </div>
+            ${shownConds.length
+              ? html`<div class="cond-chips">
+                  ${shownConds.map(
+                    (c) => html`<span class="cond-chip">${this._condChipText(c)}</span>`
+                  )}
+                  ${conds.length > 2
+                    ? html`<span class="cond-chip"
+                        >${t(this.hass, "config_panel.scenarios_cond_more", {
+                          n: conds.length - 2,
+                        })}</span
+                      >`
+                    : nothing}
+                </div>`
+              : nothing}
             ${scenario.warnings?.length
-              ? html`<p class="warning">⚠ ${scenario.warnings.join(" · ")}</p>`
+              ? html`<div class="warn-line">
+                  <ha-icon icon="mdi:alert-outline"></ha-icon>
+                  <span>${scenario.warnings.join(" · ")}</span>
+                </div>`
               : nothing}
           </div>
-          <div class="list-actions">
-            <button class="btn-outline" @click=${() => this._openEdit(scenario)}>
-              ${t(this.hass, "config_panel.scenarios_edit")}
+          ${this._renderDaypart(scenario)}
+          <div class="srow-actions">
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_run")}
+              aria-label=${t(this.hass, "config_panel.scenarios_run")}
+              @click=${() => {
+                this._runPopoverId =
+                  this._runPopoverId === scenario.id ? null : scenario.id;
+                this._menuOpenId = null;
+                this.requestUpdate();
+              }}
+            >
+              <ha-icon icon="mdi:play"></ha-icon>
             </button>
-            <button class="btn-danger" @click=${() => this._delete(scenario)}>
-              ${t(this.hass, "config_panel.scenarios_delete")}
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_edit")}
+              aria-label=${t(this.hass, "config_panel.scenarios_edit")}
+              @click=${() => this._openEdit(scenario)}
+            >
+              <ha-icon icon="mdi:pencil-outline"></ha-icon>
             </button>
+            <button
+              type="button"
+              class="iconbtn"
+              title=${t(this.hass, "config_panel.scenarios_more")}
+              aria-label=${t(this.hass, "config_panel.scenarios_more")}
+              @click=${() => {
+                this._menuOpenId =
+                  this._menuOpenId === scenario.id ? null : scenario.id;
+                this._runPopoverId = null;
+                this.requestUpdate();
+              }}
+            >
+              <ha-icon icon="mdi:dots-vertical"></ha-icon>
+            </button>
+            ${this._runPopoverId === scenario.id
+              ? this._renderRunPopover(scenario)
+              : nothing}
+            ${this._menuOpenId === scenario.id
+              ? this._renderMenu(scenario, index, total)
+              : nothing}
           </div>
         </div>
       </div>
     `;
   }
+
+  private _renderRunPopover(scenario: Scenario) {
+    return html`
+      <div class="popover" @click=${(e: Event) => e.stopPropagation()}>
+        <p style="margin:0 0 8px;font-size:0.88rem">
+          ${t(this.hass, "config_panel.scenarios_run_now_confirm")}
+        </p>
+        <label class="checkbox-row" style="margin:0 0 10px">
+          <input
+            type="checkbox"
+            .checked=${this._runIgnoreConditions}
+            @change=${(e: Event) => {
+              this._runIgnoreConditions = (e.target as HTMLInputElement).checked;
+            }}
+          />
+          ${t(this.hass, "config_panel.scenarios_run_ignore_short")}
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button
+            class="btn-outline"
+            @click=${() => {
+              this._runPopoverId = null;
+              this.requestUpdate();
+            }}
+          >
+            ${t(this.hass, "config_panel.cancel")}
+          </button>
+          <button
+            class="btn"
+            .disabled=${this._busy}
+            @click=${() => this._runNow(scenario.id)}
+          >
+            ${t(this.hass, "config_panel.scenarios_run")}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderMenu(scenario: Scenario, index: number, total: number) {
+    return html`
+      <div class="popover" @click=${(e: Event) => e.stopPropagation()}>
+        <button
+          class="menu-item"
+          .disabled=${index === 0}
+          @click=${() => {
+            this._menuOpenId = null;
+            this._move(index, -1);
+          }}
+        >
+          <ha-icon icon="mdi:chevron-up"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_move_up")}
+        </button>
+        <button
+          class="menu-item"
+          .disabled=${index === total - 1}
+          @click=${() => {
+            this._menuOpenId = null;
+            this._move(index, 1);
+          }}
+        >
+          <ha-icon icon="mdi:chevron-down"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_move_down")}
+        </button>
+        <button class="menu-item" @click=${() => this._duplicate(scenario)}>
+          <ha-icon icon="mdi:content-copy"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_duplicate")}
+        </button>
+        <button class="menu-item danger" @click=${() => this._delete(scenario)}>
+          <ha-icon icon="mdi:delete-outline"></ha-icon>
+          ${t(this.hass, "config_panel.scenarios_delete")}
+        </button>
+      </div>
+    `;
+  }
+
+  // ---- editor dialog sections (unchanged logic, emoji-free) ----
 
   private _renderWhenSection(draft: Scenario) {
     return html`
@@ -516,20 +925,18 @@ export class ViewScenarios extends LitElement {
           </button>
         </div>
         ${draft.trigger.type === "fixed_time"
-          ? html`
-              <input
-                type="time"
-                style="width:auto"
-                .value=${draft.trigger.time_local ?? "07:00"}
-                @input=${(e: Event) =>
-                  this._patch({
-                    trigger: {
-                      ...draft.trigger,
-                      time_local: (e.target as HTMLInputElement).value,
-                    },
-                  })}
-              />
-            `
+          ? html`<input
+              type="time"
+              style="width:auto"
+              .value=${draft.trigger.time_local ?? "07:00"}
+              @input=${(e: Event) =>
+                this._patch({
+                  trigger: {
+                    ...draft.trigger,
+                    time_local: (e.target as HTMLInputElement).value,
+                  },
+                })}
+            />`
           : html`
               <select
                 style="width:auto"
@@ -544,15 +951,15 @@ export class ViewScenarios extends LitElement {
                   })}
               >
                 ${["sunrise", "sunset", "solar_noon"].map(
-                  (ev) => html`
-                    <option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
-                      ${t(this.hass, `config_panel.sun_${ev}`)}
-                    </option>
-                  `
+                  (ev) => html`<option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
+                    ${t(this.hass, `config_panel.sun_${ev}`)}
+                  </option>`
                 )}
               </select>
               <div>
-                <label class="field-label">${t(this.hass, "config_panel.scenarios_offset_min")}</label>
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.scenarios_offset_min")}</label
+                >
                 <input
                   type="number"
                   min="-720"
@@ -570,43 +977,38 @@ export class ViewScenarios extends LitElement {
               </div>
             `}
       </div>
+      ${this._renderLivePreview(draft)}
 
       <label class="field-label">${t(this.hass, "config_panel.scenarios_random")}</label>
       ${renderHelp(this.hass, "random")}
       <div class="row">
         <span class="chips">
           ${RANDOM_WINDOWS.map(
-            (w) => html`
-              <button
-                type="button"
-                class="chip ${draft.random_window_min === w ? "selected" : ""}"
-                @click=${() => this._patch({ random_window_min: w })}
-              >
-                ${w === 0 ? t(this.hass, "config_panel.off") : `${w} min`}
-              </button>
-            `
+            (w) => html`<button
+              type="button"
+              class="chip ${draft.random_window_min === w ? "selected" : ""}"
+              @click=${() => this._patch({ random_window_min: w })}
+            >
+              ${w === 0 ? t(this.hass, "config_panel.off") : `${w} min`}
+            </button>`
           )}
         </span>
         ${draft.random_window_min
-          ? html`
-              <select
-                style="width:auto"
-                .value=${draft.random_direction}
-                @change=${(e: Event) =>
-                  this._patch({
-                    random_direction: (e.target as HTMLSelectElement)
-                      .value as Scenario["random_direction"],
-                  })}
-              >
-                ${(["after", "before", "both"] as const).map(
-                  (d) => html`
-                    <option value=${d} ?selected=${draft.random_direction === d}>
-                      ${t(this.hass, `config_panel.random_${d}`)}
-                    </option>
-                  `
-                )}
-              </select>
-            `
+          ? html`<select
+              style="width:auto"
+              .value=${draft.random_direction}
+              @change=${(e: Event) =>
+                this._patch({
+                  random_direction: (e.target as HTMLSelectElement)
+                    .value as Scenario["random_direction"],
+                })}
+            >
+              ${(["after", "before", "both"] as const).map(
+                (d) => html`<option value=${d} ?selected=${draft.random_direction === d}>
+                  ${t(this.hass, `config_panel.random_${d}`)}
+                </option>`
+              )}
+            </select>`
           : nothing}
       </div>
 
@@ -614,44 +1016,56 @@ export class ViewScenarios extends LitElement {
       <div class="chips" style="margin-bottom:12px">
         ${WEEKDAYS.map((d) => {
           const selected = draft.weekdays.includes(d);
-          return html`
-            <button
-              type="button"
-              class="chip ${selected ? "selected" : ""}"
-              @click=${() =>
-                this._patch({
-                  weekdays: selected
-                    ? draft.weekdays.filter((x) => x !== d)
-                    : [...draft.weekdays, d],
-                })}
-            >
-              ${t(this.hass, `config_panel.weekday_${d}`)}
-            </button>
-          `;
+          return html`<button
+            type="button"
+            class="chip ${selected ? "selected" : ""}"
+            @click=${() =>
+              this._patch({
+                weekdays: selected
+                  ? draft.weekdays.filter((x) => x !== d)
+                  : [...draft.weekdays, d],
+              })}
+          >
+            ${t(this.hass, `config_panel.weekday_${d}`)}
+          </button>`;
         })}
       </div>
 
       <label class="field-label">${t(this.hass, "config_panel.scenarios_retry")}</label>
       <div class="chips" style="margin-bottom:4px">
         ${RETRY_WINDOWS.map(
-          (w) => html`
-            <button
-              type="button"
-              class="chip ${draft.retry_window_min === w ? "selected" : ""}"
-              @click=${() => this._patch({ retry_window_min: w })}
-            >
-              ${w === 0
-                ? t(this.hass, "config_panel.off")
-                : w < 120
-                  ? `${w} min`
-                  : `${w / 60} h`}
-            </button>
-          `
+          (w) => html`<button
+            type="button"
+            class="chip ${draft.retry_window_min === w ? "selected" : ""}"
+            @click=${() => this._patch({ retry_window_min: w })}
+          >
+            ${w === 0
+              ? t(this.hass, "config_panel.off")
+              : w < 120
+                ? `${w} min`
+                : `${w / 60} h`}
+          </button>`
         )}
       </div>
       <p class="section-desc">${t(this.hass, "config_panel.scenarios_retry_hint")}</p>
       ${renderHelp(this.hass, "retry")}
     `;
+  }
+
+  /** Live preview of today's computed trigger time under the WHEN section. */
+  private _renderLivePreview(draft: Scenario) {
+    if (!draft.id) return nothing;
+    const occ = this._occFor(draft);
+    if (!occ) return nothing;
+    return html`<p class="section-desc" style="margin-top:6px">
+      ${t(this.hass, "config_panel.scenarios_today_at", {
+        time: formatTime(occ.planned_at),
+      })}${occ.random_offset_min
+        ? ` (${t(this.hass, "config_panel.today_random_offset", {
+            n: occ.random_offset_min,
+          })})`
+        : ""}
+    </p>`;
   }
 
   private _renderThenSection(draft: Scenario) {
@@ -663,7 +1077,12 @@ export class ViewScenarios extends LitElement {
     return html`
       <div class="section-title">${t(this.hass, "config_panel.scenarios_then")}</div>
       <div class="slider-row">
-        <span class="muted">${t(this.hass, "config_panel.scenarios_position")}</span>
+        <ha-icon
+          icon=${draft.action.position >= 50
+            ? "mdi:window-shutter-open"
+            : "mdi:window-shutter"}
+          style="--mdc-icon-size:22px;color:var(--secondary-text-color)"
+        ></ha-icon>
         <input
           type="range"
           min="0"
@@ -695,44 +1114,40 @@ export class ViewScenarios extends LitElement {
       </div>
       <p class="section-desc">${t(this.hass, "config_panel.scenarios_position_hint")}</p>
       ${anyTilt
-        ? html`
-            <div class="slider-row">
-              <span class="muted">${t(this.hass, "config_panel.scenarios_tilt")}</span>
+        ? html`<div class="slider-row">
+            <span class="muted">${t(this.hass, "config_panel.scenarios_tilt")}</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              .value=${String(draft.action.tilt_position ?? 0)}
+              .disabled=${draft.action.tilt_position == null}
+              @input=${(e: Event) =>
+                this._patch({
+                  action: {
+                    ...draft.action,
+                    tilt_position: Number((e.target as HTMLInputElement).value),
+                  },
+                })}
+            />
+            <label class="checkbox-row" style="margin:0">
               <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                .value=${String(draft.action.tilt_position ?? 0)}
-                .disabled=${draft.action.tilt_position == null}
-                @input=${(e: Event) =>
+                type="checkbox"
+                .checked=${draft.action.tilt_position != null}
+                @change=${(e: Event) =>
                   this._patch({
                     action: {
                       ...draft.action,
-                      tilt_position: Number((e.target as HTMLInputElement).value),
+                      tilt_position: (e.target as HTMLInputElement).checked ? 50 : null,
                     },
                   })}
               />
-              <label class="checkbox-row" style="margin:0">
-                <input
-                  type="checkbox"
-                  .checked=${draft.action.tilt_position != null}
-                  @change=${(e: Event) =>
-                    this._patch({
-                      action: {
-                        ...draft.action,
-                        tilt_position: (e.target as HTMLInputElement).checked
-                          ? 50
-                          : null,
-                      },
-                    })}
-                />
-                ${draft.action.tilt_position != null
-                  ? `${draft.action.tilt_position}%`
-                  : t(this.hass, "config_panel.off")}
-              </label>
-            </div>
-          `
+              ${draft.action.tilt_position != null
+                ? `${draft.action.tilt_position}%`
+                : t(this.hass, "config_panel.off")}
+            </label>
+          </div>`
         : nothing}
       <div class="row" style="margin-top:8px">
         <div>
@@ -762,7 +1177,9 @@ export class ViewScenarios extends LitElement {
         <summary>${t(this.hass, "config_panel.scenarios_advanced")}</summary>
         <div class="row" style="margin-top:8px">
           <div>
-            <label class="field-label">${t(this.hass, "config_panel.scenarios_min_delta")}</label>
+            <label class="field-label"
+              >${t(this.hass, "config_panel.scenarios_min_delta")}</label
+            >
             <input
               type="number"
               min="0"
@@ -798,7 +1215,6 @@ export class ViewScenarios extends LitElement {
     this._patch({ assignments });
   }
 
-  /** Append the given covers as assignments, skipping already-assigned ones. */
   private _addCovers(covers: CoverRuntime[]): void {
     if (!this._draft || !covers.length) return;
     const assigned = new Set(this._draft.assignments.map((a) => a.cover_item_id));
@@ -823,27 +1239,27 @@ export class ViewScenarios extends LitElement {
         <div class="assignment-head">
           <span class="name">${this._coverName(assignment.cover_item_id)}</span>
           ${assignment.extra_conditions.length
-            ? html`<span class="badge">${t(
-                this.hass,
-                "config_panel.scenarios_extra_conditions_badge",
-                { n: assignment.extra_conditions.length }
-              )}</span>`
+            ? html`<span class="badge"
+                >${t(this.hass, "config_panel.scenarios_extra_conditions_badge", {
+                  n: assignment.extra_conditions.length,
+                })}</span
+              >`
             : nothing}
           ${hasOverride
-            ? html`<span class="badge">${t(
-                this.hass,
-                "config_panel.scenarios_override_badge"
-              )}</span>`
+            ? html`<span class="badge"
+                >${t(this.hass, "config_panel.scenarios_override_badge")}</span
+              >`
             : nothing}
           <button
-            class="cond-remove"
+            class="iconbtn danger"
+            aria-label=${t(this.hass, "config_panel.scenarios_remove_cover")}
             title=${t(this.hass, "config_panel.scenarios_remove_cover")}
             @click=${() =>
               this._patch({
                 assignments: draft.assignments.filter((_, i) => i !== index),
               })}
           >
-            ✕
+            <ha-icon icon="mdi:close"></ha-icon>
           </button>
         </div>
         <details class="expand">
@@ -868,7 +1284,9 @@ export class ViewScenarios extends LitElement {
           ${renderHelp(this.hass, "override")}
           <div class="row">
             <div>
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_position")}</label>
+              <label class="field-label"
+                >${t(this.hass, "config_panel.scenarios_position")}</label
+              >
               <input
                 type="number"
                 min="0"
@@ -888,30 +1306,32 @@ export class ViewScenarios extends LitElement {
               />
             </div>
             ${cover?.capabilities.supports_tilt
-              ? html`
-                  <div>
-                    <label class="field-label">${t(this.hass, "config_panel.scenarios_tilt")}</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      style="width:90px"
-                      .value=${ov.tilt_position == null ? "" : String(ov.tilt_position)}
-                      @input=${(e: Event) => {
-                        const raw = (e.target as HTMLInputElement).value;
-                        this._patchAssignment(index, {
-                          action_override: {
-                            ...ov,
-                            tilt_position: raw === "" ? null : Number(raw),
-                          },
-                        });
-                      }}
-                    />
-                  </div>
-                `
+              ? html`<div>
+                  <label class="field-label"
+                    >${t(this.hass, "config_panel.scenarios_tilt")}</label
+                  >
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    style="width:90px"
+                    .value=${ov.tilt_position == null ? "" : String(ov.tilt_position)}
+                    @input=${(e: Event) => {
+                      const raw = (e.target as HTMLInputElement).value;
+                      this._patchAssignment(index, {
+                        action_override: {
+                          ...ov,
+                          tilt_position: raw === "" ? null : Number(raw),
+                        },
+                      });
+                    }}
+                  />
+                </div>`
               : nothing}
             <div>
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_mode")}</label>
+              <label class="field-label"
+                >${t(this.hass, "config_panel.scenarios_mode")}</label
+              >
               <select
                 style="width:auto"
                 @change=${(e: Event) => {
@@ -943,14 +1363,12 @@ export class ViewScenarios extends LitElement {
 
   private _renderQuickAdd(addable: CoverRuntime[]) {
     if (!addable.length) return nothing;
-    // Direction buckets: nearest-of-8 compass point per cover azimuth.
     const byDir = new Map<number, CoverRuntime[]>();
     for (const c of addable) {
       if (c.azimuth == null) continue;
       const deg = nearestCompassDeg(c.azimuth);
       (byDir.get(deg) ?? byDir.set(deg, []).get(deg)!).push(c);
     }
-    // Room buckets, sorted by area name.
     const byArea = new Map<string, CoverRuntime[]>();
     for (const c of addable) {
       if (!c.area_id) continue;
@@ -965,14 +1383,8 @@ export class ViewScenarios extends LitElement {
         <span class="quick-add-label"
           >${t(this.hass, "config_panel.scenarios_quick_add")}</span
         >
-        <button
-          type="button"
-          class="chip"
-          @click=${() => this._addCovers(addable)}
-        >
-          ＋ ${t(this.hass, "config_panel.scenarios_quick_add_all", {
-            n: addable.length,
-          })}
+        <button type="button" class="chip" @click=${() => this._addCovers(addable)}>
+          ${t(this.hass, "config_panel.scenarios_quick_add_all", { n: addable.length })}
         </button>
         ${anyDir
           ? html`<span class="quick-add-group">
@@ -985,13 +1397,9 @@ export class ViewScenarios extends LitElement {
                   ? html`<button
                       type="button"
                       class="chip"
-                      title=${t(this.hass, "config_panel.scenarios_quick_add_direction_title", {
-                        label,
-                        n: covers.length,
-                      })}
                       @click=${() => this._addCovers(covers)}
                     >
-                      🧭 ${label} ·${covers.length}
+                      <ha-icon icon="mdi:compass-outline"></ha-icon>${label} ·${covers.length}
                     </button>`
                   : nothing;
               })}
@@ -1008,7 +1416,7 @@ export class ViewScenarios extends LitElement {
                   class="chip"
                   @click=${() => this._addCovers(a.covers)}
                 >
-                  📍 ${a.name} ·${a.covers.length}
+                  <ha-icon icon="mdi:map-marker-outline"></ha-icon>${a.name} ·${a.covers.length}
                 </button>`
               )}
             </span>`
@@ -1026,32 +1434,26 @@ export class ViewScenarios extends LitElement {
       ${this._renderQuickAdd(addable)}
       ${draft.assignments.map((a, i) => this._renderAssignment(draft, a, i))}
       ${addable.length
-        ? html`
-            <select
-              @change=${(e: Event) => {
-                const sel = e.target as HTMLSelectElement;
-                if (!sel.value) return;
-                this._patch({
-                  assignments: [
-                    ...draft.assignments,
-                    {
-                      cover_item_id: sel.value,
-                      extra_conditions: [],
-                      action_override: null,
-                    },
-                  ],
-                });
-                sel.value = "";
-              }}
-            >
-              <option value="">
-                ＋ ${t(this.hass, "config_panel.scenarios_add_cover")}
-              </option>
-              ${addable.map(
-                (c) => html`<option value=${c.id}>${c.name}</option>`
-              )}
-            </select>
-          `
+        ? html`<select
+            @change=${(e: Event) => {
+              const sel = e.target as HTMLSelectElement;
+              if (!sel.value) return;
+              this._patch({
+                assignments: [
+                  ...draft.assignments,
+                  {
+                    cover_item_id: sel.value,
+                    extra_conditions: [],
+                    action_override: null,
+                  },
+                ],
+              });
+              sel.value = "";
+            }}
+          >
+            <option value="">+ ${t(this.hass, "config_panel.scenarios_add_cover")}</option>
+            ${addable.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select>`
         : nothing}
       ${!this.snapshot.covers.length
         ? html`<p class="muted">${t(this.hass, "config_panel.scenarios_no_covers_hint")}</p>`
@@ -1063,39 +1465,23 @@ export class ViewScenarios extends LitElement {
     const draft = this._draft;
     if (!draft) return nothing;
     return html`
-      <div class="dialog-backdrop" @click=${(e: Event) => {
-        if (e.target === e.currentTarget) {
-          this._draft = null;
-          this.requestUpdate();
-        }
-      }}>
-        <div class="dialog" style="max-width:760px">
-          <h3>
-            ${draft.id
-              ? t(this.hass, "config_panel.scenarios_dialog_edit", { name: draft.name })
-              : t(this.hass, "config_panel.scenarios_dialog_new")}
-          </h3>
-          ${this._error ? html`<p class="error">${this._error}</p>` : nothing}
-          ${this._warnings.map((w) => html`<p class="warning">⚠ ${w}</p>`)}
-
-          ${renderEntityDatalist(
-            this.hass,
-            "ac-all-entities",
-            null,
-            this.snapshot.config.favorite_entity_ids
-          )}
-
-          <div class="row">
-            <div class="grow">
-              <label class="field-label">${t(this.hass, "config_panel.scenarios_field_name")}</label>
-              <input
-                type="text"
-                .value=${draft.name}
-                @input=${(e: Event) =>
-                  this._patch({ name: (e.target as HTMLInputElement).value })}
-              />
-            </div>
-            <label class="checkbox-row" style="margin:0 0 6px">
+      <div
+        class="dialog-backdrop"
+        @click=${(e: Event) => {
+          if (e.target === e.currentTarget) {
+            this._draft = null;
+            this.requestUpdate();
+          }
+        }}
+      >
+        <div class="dialog sticky">
+          <div class="dialog-head">
+            <h3>
+              ${draft.id
+                ? t(this.hass, "config_panel.scenarios_dialog_edit", { name: draft.name })
+                : t(this.hass, "config_panel.scenarios_dialog_new")}
+            </h3>
+            <label class="checkbox-row" style="margin:0">
               <input
                 type="checkbox"
                 .checked=${draft.enabled}
@@ -1105,33 +1491,62 @@ export class ViewScenarios extends LitElement {
               ${t(this.hass, "config_panel.scenarios_enabled")}
             </label>
           </div>
+          <div class="dialog-scroll">
+            ${this._error ? html`<p class="error">${this._error}</p>` : nothing}
+            ${this._warnings.map(
+              (w) => html`<p class="warning">
+                <ha-icon icon="mdi:alert-outline" style="--mdc-icon-size:16px"></ha-icon>
+                ${w}
+              </p>`
+            )}
 
-          ${this._renderWhenSection(draft)}
+            ${renderEntityDatalist(
+              this.hass,
+              "ac-all-entities",
+              null,
+              this.snapshot.config.favorite_entity_ids
+            )}
 
-          <div class="section-title">${t(this.hass, "config_panel.scenarios_only_if")}</div>
-          <p class="section-desc">
-            ${t(this.hass, "config_panel.scenarios_only_if_desc")}
-          </p>
-          ${renderConditionEditor({
-            hass: this.hass,
-            conditions: draft.conditions,
-            onChange: (conds) => this._patch({ conditions: conds }),
-            entityListId: "ac-all-entities",
-            contactAvailable: draft.assignments.some((a) =>
-              Boolean(
-                this.snapshot.covers.find((c) => c.id === a.cover_item_id)
-                  ?.contact_entity_id
-              )
-            ),
-          })}
+            <div class="row">
+              <div class="grow">
+                <label class="field-label"
+                  >${t(this.hass, "config_panel.scenarios_field_name")}</label
+                >
+                <input
+                  type="text"
+                  .value=${draft.name}
+                  @input=${(e: Event) =>
+                    this._patch({ name: (e.target as HTMLInputElement).value })}
+                />
+              </div>
+            </div>
 
-          ${this._renderThenSection(draft)}
-          ${this._renderCoversSection(draft)}
+            ${this._renderWhenSection(draft)}
 
-          <div class="dialog-actions">
+            <div class="section-title">
+              ${t(this.hass, "config_panel.scenarios_only_if")}
+            </div>
+            <p class="section-desc">
+              ${t(this.hass, "config_panel.scenarios_only_if_desc")}
+            </p>
+            ${renderConditionEditor({
+              hass: this.hass,
+              conditions: draft.conditions,
+              onChange: (conds) => this._patch({ conditions: conds }),
+              entityListId: "ac-all-entities",
+              contactAvailable: draft.assignments.some((a) =>
+                Boolean(
+                  this.snapshot.covers.find((c) => c.id === a.cover_item_id)
+                    ?.contact_entity_id
+                )
+              ),
+            })}
+
+            ${this._renderThenSection(draft)} ${this._renderCoversSection(draft)}
+          </div>
+          <div class="dialog-foot">
             ${draft.id
-              ? html`
-                  <label class="checkbox-row" style="margin:0">
+              ? html`<label class="checkbox-row" style="margin:0">
                     <input
                       type="checkbox"
                       .checked=${this._runIgnoreConditions}
@@ -1141,7 +1556,7 @@ export class ViewScenarios extends LitElement {
                         ).checked;
                       }}
                     />
-                    ${t(this.hass, "config_panel.scenarios_run_ignore")}
+                    ${t(this.hass, "config_panel.scenarios_run_ignore_short")}
                   </label>
                   <button
                     class="btn-outline"
@@ -1149,10 +1564,9 @@ export class ViewScenarios extends LitElement {
                     @click=${() => this._runNow(draft.id)}
                   >
                     ${t(this.hass, "config_panel.scenarios_run_now")}
-                  </button>
-                `
+                  </button>`
               : nothing}
-            <span class="spacer"></span>
+            <span style="flex:1"></span>
             <button
               class="btn-outline"
               @click=${() => {
@@ -1181,14 +1595,15 @@ export class ViewScenarios extends LitElement {
         <div class="card-header">
           <ha-icon icon="mdi:script-text-outline"></ha-icon>
           ${t(this.hass, "config_panel.scenarios_title")}
+          <span class="muted" style="font-weight:400">${snap.scenarios.length}</span>
           <span class="header-actions">
             <button class="btn" @click=${this._openAdd}>
-              ＋ ${t(this.hass, "config_panel.scenarios_add")}
+              ${t(this.hass, "config_panel.scenarios_add")}
             </button>
           </span>
         </div>
         <div class="card-content">
-          <p class="intro">${t(this.hass, "config_panel.scenarios_intro")}</p>
+          <p class="intro">${t(this.hass, "config_panel.scenarios_order_desc")}</p>
           ${renderHelp(this.hass, "priority")}
           ${this._error && !this._draft
             ? html`<p class="error">${this._error}</p>`

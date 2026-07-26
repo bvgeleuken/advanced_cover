@@ -143,8 +143,28 @@ export interface CoverRuntime extends CoverItem {
   capabilities: CoverCapabilities;
   current_position: number | null;
   contact_state: string | null;
+  safety_blocked: boolean;
   next_action: NextAction | null;
   missing_entities: string[];
+}
+
+/** One evaluated condition, ready to render as a checklist line. */
+export interface ConditionEval {
+  scope: "scenario" | "assignment" | "safety";
+  type: string;
+  entity_id: string | null;
+  ok: boolean | null; // null = cannot be evaluated (unavailable / missing)
+  actual: string | null;
+  summary_key: string;
+  summary_values: Record<string, string | number>;
+}
+
+/** Rollup over all conditions of one scope. */
+export interface Preflight {
+  verdict: "would_run" | "would_skip" | "unknown";
+  evaluated_at: string;
+  failing: number;
+  conditions: ConditionEval[];
 }
 
 export interface AssignmentRun {
@@ -152,11 +172,13 @@ export interface AssignmentRun {
   cover_name: string;
   target_position: number;
   target_tilt: number | null;
+  area_id: string | null;
   status: "idle" | "armed" | "done" | "expired";
   result: string | null;
   reason: string | null;
   armed_until: string | null;
   waiting_for: string[];
+  preflight: Preflight | null;
 }
 
 export interface Occurrence {
@@ -168,6 +190,8 @@ export interface Occurrence {
   retry_until: string | null;
   fired: boolean;
   assignments: AssignmentRun[];
+  preflight: Preflight | null;
+  covers_would_run: number;
 }
 
 export interface LogEntry {
@@ -195,7 +219,7 @@ export interface PanelSnapshot {
   scenarios: Scenario[];
   plan: Occurrence[];
   log: LogEntry[];
-  sun: { sunrise: string | null; sunset: string | null };
+  sun: { sunrise: string | null; sunset: string | null; solar_noon: string | null };
   now: string;
 }
 
