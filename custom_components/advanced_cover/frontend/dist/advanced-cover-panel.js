@@ -912,30 +912,25 @@ const sharedStyles = i$3 `
     --mdc-icon-size: 20px;
   }
 
-  /* Compact list row: fixed height, single line, expandable. */
+  /* Compact list row: header + optional expanded detail stack vertically.
+     Left accent is a rounded border (matches Today's .block / Scenarios .srow). */
   .compact-row {
-    display: flex;
-    align-items: stretch;
     border: 1px solid var(--divider-color);
+    border-left: 3px solid var(--primary-color);
     border-radius: 10px;
     background: var(--card-background-color);
     margin-bottom: 8px;
     overflow: hidden;
-    transition: border-color 0.12s ease;
+    transition: background 0.12s ease;
   }
   .compact-row:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--divider-color));
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background-color));
   }
-  .compact-row .accent {
-    width: 3px;
-    flex-shrink: 0;
-    background: var(--primary-color);
+  .compact-row.inactive {
+    border-left-color: var(--disabled-text-color, #6d7476);
   }
-  .compact-row .accent.inactive {
-    background: var(--disabled-text-color, #6d7476);
-  }
-  .compact-row .accent.danger {
-    background: var(--error-color, #d93025);
+  .compact-row.danger {
+    border-left-color: var(--error-color, #d93025);
   }
 
   /* Icon-only button with a guaranteed hit area + focus ring. */
@@ -1309,8 +1304,9 @@ class ViewCovers extends i {
         display: flex;
         align-items: center;
         gap: 10px;
-        flex: 1;
+        width: 100%;
         min-width: 0;
+        box-sizing: border-box;
         padding: 8px 12px;
         cursor: pointer;
         background: none;
@@ -1505,6 +1501,12 @@ class ViewCovers extends i {
         .crow-pos {
           width: 96px;
         }
+        .crow-detail {
+          padding-left: 14px;
+        }
+        .drive-row .slider {
+          min-width: 120px;
+        }
       }
     `,
     ]; }
@@ -1689,14 +1691,9 @@ class ViewCovers extends i {
         const expanded = this._expanded.has(cover.id);
         const missing = cover.missing_entities.length > 0;
         const na = cover.next_action;
-        const accentClass = missing
-            ? "danger"
-            : cover.enabled
-                ? ""
-                : "inactive";
+        const accentClass = missing ? "danger" : cover.enabled ? "" : "inactive";
         return b `
-      <div class="compact-row ${cover.enabled ? "" : "paused"}">
-        <div class="accent ${accentClass}"></div>
+      <div class="compact-row ${accentClass}">
         <button
           type="button"
           class="crow"
@@ -5534,7 +5531,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",
