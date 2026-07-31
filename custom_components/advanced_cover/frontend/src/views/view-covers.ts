@@ -134,8 +134,9 @@ export class ViewCovers extends LitElement {
         display: flex;
         align-items: center;
         gap: 10px;
-        flex: 1;
+        width: 100%;
         min-width: 0;
+        box-sizing: border-box;
         padding: 8px 12px;
         cursor: pointer;
         background: none;
@@ -329,6 +330,12 @@ export class ViewCovers extends LitElement {
         }
         .crow-pos {
           width: 96px;
+        }
+        .crow-detail {
+          padding-left: 14px;
+        }
+        .drive-row .slider {
+          min-width: 120px;
         }
       }
     `,
@@ -551,14 +558,9 @@ export class ViewCovers extends LitElement {
     const expanded = this._expanded.has(cover.id);
     const missing = cover.missing_entities.length > 0;
     const na = cover.next_action;
-    const accentClass = missing
-      ? "danger"
-      : cover.enabled
-        ? ""
-        : "inactive";
+    const accentClass = missing ? "danger" : cover.enabled ? "" : "inactive";
     return html`
-      <div class="compact-row ${cover.enabled ? "" : "paused"}">
-        <div class="accent ${accentClass}"></div>
+      <div class="compact-row ${accentClass}">
         <button
           type="button"
           class="crow"

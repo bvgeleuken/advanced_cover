@@ -697,30 +697,25 @@ export const sharedStyles = css`
     --mdc-icon-size: 20px;
   }
 
-  /* Compact list row: fixed height, single line, expandable. */
+  /* Compact list row: header + optional expanded detail stack vertically.
+     Left accent is a rounded border (matches Today's .block / Scenarios .srow). */
   .compact-row {
-    display: flex;
-    align-items: stretch;
     border: 1px solid var(--divider-color);
+    border-left: 3px solid var(--primary-color);
     border-radius: 10px;
     background: var(--card-background-color);
     margin-bottom: 8px;
     overflow: hidden;
-    transition: border-color 0.12s ease;
+    transition: background 0.12s ease;
   }
   .compact-row:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--divider-color));
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background-color));
   }
-  .compact-row .accent {
-    width: 3px;
-    flex-shrink: 0;
-    background: var(--primary-color);
+  .compact-row.inactive {
+    border-left-color: var(--disabled-text-color, #6d7476);
   }
-  .compact-row .accent.inactive {
-    background: var(--disabled-text-color, #6d7476);
-  }
-  .compact-row .accent.danger {
-    background: var(--error-color, #d93025);
+  .compact-row.danger {
+    border-left-color: var(--error-color, #d93025);
   }
 
   /* Icon-only button with a guaranteed hit area + focus ring. */
