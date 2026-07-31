@@ -129,12 +129,20 @@ export class ViewCovers extends LitElement {
       .group-head .icon-group {
         margin-left: auto;
       }
-      /* Compact row. */
+      /* Compact row: full-width clickable toggle + trailing controls.
+         The control buttons and chevron are siblings of the toggle — never
+         nested inside it, since a native <button> nested in a <button> is
+         invalid HTML and the parser expels it onto its own line. */
+      .crow-head {
+        display: flex;
+        align-items: center;
+        padding-right: 8px;
+      }
       .crow {
         display: flex;
         align-items: center;
         gap: 10px;
-        width: 100%;
+        flex: 1;
         min-width: 0;
         box-sizing: border-box;
         padding: 8px 12px;
@@ -193,6 +201,12 @@ export class ViewCovers extends LitElement {
       .crow-next ha-icon {
         --mdc-icon-size: 16px;
         flex-shrink: 0;
+      }
+      .crow-chevron-btn {
+        flex-shrink: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
       }
       .crow-chevron {
         --mdc-icon-size: 22px;
@@ -325,7 +339,7 @@ export class ViewCovers extends LitElement {
         }
       }
       @container acview (max-width: 620px) {
-        .crow .icon-group {
+        .crow-head .icon-group {
           display: none;
         }
         .crow-pos {
@@ -561,6 +575,7 @@ export class ViewCovers extends LitElement {
     const accentClass = missing ? "danger" : cover.enabled ? "" : "inactive";
     return html`
       <div class="compact-row ${accentClass}">
+        <div class="crow-head">
         <button
           type="button"
           class="crow"
@@ -632,17 +647,26 @@ export class ViewCovers extends LitElement {
                   >${t(this.hass, "config_panel.covers_no_action_today")}</span
                 >`}
           </div>
+        </button>
           ${missing
             ? html`<span class="link-off"
                 ><ha-icon icon="mdi:link-variant-off"></ha-icon
                 >${t(this.hass, "config_panel.covers_link_missing")}</span
               >`
             : this._renderControlGroup(cover)}
-          <ha-icon
-            class="crow-chevron"
-            icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
-          ></ha-icon>
-        </button>
+          <button
+            type="button"
+            class="iconbtn crow-chevron-btn"
+            aria-expanded=${expanded ? "true" : "false"}
+            aria-label=${t(this.hass, "config_panel.covers_expand")}
+            @click=${() => this._toggleExpand(cover.id)}
+          >
+            <ha-icon
+              class="crow-chevron"
+              icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+            ></ha-icon>
+          </button>
+        </div>
         ${expanded ? this._renderDetail(cover) : nothing}
       </div>
     `;

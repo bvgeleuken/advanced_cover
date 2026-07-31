@@ -256,7 +256,7 @@ export class ViewToday extends LitElement {
         border: 1px solid var(--divider-color);
         border-left: 3px solid var(--divider-color);
         border-radius: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
         overflow: hidden;
       }
       .block.would_skip,
@@ -271,22 +271,33 @@ export class ViewToday extends LitElement {
       .block.unavailable {
         border-left-color: var(--error-color, #d93025);
       }
+      /* Row: full-width clickable toggle + trailing icon buttons.
+         The icon buttons are siblings of the toggle (never nested inside
+         it) — a native <button> nested in a <button> is invalid HTML and
+         the parser expels it onto its own line. */
       .block-head {
         display: flex;
         align-items: center;
+        gap: 2px;
+        padding-right: 6px;
+      }
+      .block-head:hover {
+        background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+      }
+      .block-toggle {
+        display: flex;
+        align-items: center;
         gap: 10px;
-        padding: 12px 14px;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 6px 8px 12px;
         cursor: pointer;
         background: none;
         border: none;
-        width: 100%;
         text-align: left;
         font: inherit;
         color: inherit;
         box-sizing: border-box;
-      }
-      .block-head:hover {
-        background: color-mix(in srgb, var(--primary-color) 5%, transparent);
       }
       .block-time {
         font-weight: 600;
@@ -317,14 +328,16 @@ export class ViewToday extends LitElement {
         font-size: 0.8rem;
         color: var(--warning-color, #f0b23a);
       }
-      .block-edit {
+      .block-edit,
+      .block-chevron-btn {
         flex-shrink: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
       }
       .block-chevron {
-        flex-shrink: 0;
         color: var(--secondary-text-color);
         --mdc-icon-size: 22px;
-        transition: transform 0.15s ease;
       }
       .block-body {
         padding: 0 14px 14px;
@@ -769,14 +782,15 @@ export class ViewToday extends LitElement {
     const reason = !occ.fired ? preflightReason(this.hass, occ.preflight) : null;
     return html`
       <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
-        <button
-          type="button"
-          class="block-head"
-          aria-expanded=${expanded ? "true" : "false"}
-          @click=${() => this._toggleOcc(occ)}
-        >
-          <span class="block-time">${formatTime(occ.planned_at)}</span>
-          <span class="block-titles">
+        <div class="block-head">
+          <button
+            type="button"
+            class="block-toggle"
+            aria-expanded=${expanded ? "true" : "false"}
+            @click=${() => this._toggleOcc(occ)}
+          >
+            <span class="block-time">${formatTime(occ.planned_at)}</span>
+            <span class="block-titles">
             <span class="block-line1">
               <span class="block-name ellipsis">${occ.scenario_name}</span>
               ${occ.random_offset_min
@@ -799,27 +813,38 @@ export class ViewToday extends LitElement {
                   >`
                 : nothing}
             </span>
-            ${reason && !expanded
-              ? html`<span class="block-reason">${reason}</span>`
-              : nothing}
-          </span>
+              ${reason && !expanded
+                ? html`<span class="block-reason">${reason}</span>`
+                : nothing}
+            </span>
+          </button>
           <button
             type="button"
             class="iconbtn block-edit"
             aria-label=${t(this.hass, "config_panel.scenarios_edit")}
             title=${t(this.hass, "config_panel.scenarios_edit")}
-            @click=${(e: Event) => {
-              e.stopPropagation();
-              this._openScenario(occ.scenario_id);
-            }}
+            @click=${() => this._openScenario(occ.scenario_id)}
           >
             <ha-icon icon="mdi:pencil-outline"></ha-icon>
           </button>
-          <ha-icon
-            class="block-chevron"
-            icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
-          ></ha-icon>
-        </button>
+          <button
+            type="button"
+            class="iconbtn block-chevron-btn"
+            aria-expanded=${expanded ? "true" : "false"}
+            aria-label=${t(
+              this.hass,
+              expanded
+                ? "config_panel.today_collapse"
+                : "config_panel.today_expand"
+            )}
+            @click=${() => this._toggleOcc(occ)}
+          >
+            <ha-icon
+              class="block-chevron"
+              icon=${expanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+            ></ha-icon>
+          </button>
+        </div>
         ${expanded && occ.assignments.length ? this._renderBlockBody(occ) : nothing}
         ${expanded && !occ.assignments.length
           ? html`<div class="block-body">
