@@ -131,6 +131,8 @@
     "today_empty_no_scenarios": "No scenarios yet. Create covers first, then scenarios.",
     "today_empty_nothing_planned": "Nothing planned for today (check weekdays and enabled switches).",
     "today_no_assignments": "No covers assigned",
+    "today_expand": "Show details",
+    "today_collapse": "Hide details",
     "today_cover_count": "{n} covers",
     "today_random_offset": "random {n} min",
     "today_retry_until": "retries until {time}",
