@@ -1512,8 +1512,49 @@ class ViewCovers extends i {
         .crow-head .icon-group {
           display: none;
         }
+        /* Two-line row: switch/icon/name + meta on top, position bar below.
+           Frees the full width for the name (no more hard truncation) and
+           drops the position + chevron onto their own line. */
+        .crow {
+          display: grid;
+          grid-template-columns: auto auto 1fr;
+          grid-template-areas:
+            "sw ic main"
+            ".  .  pos";
+          column-gap: 10px;
+          row-gap: 6px;
+          align-items: center;
+        }
+        .crow > ha-switch {
+          grid-area: sw;
+        }
+        .crow .kind-icon {
+          grid-area: ic;
+        }
+        .crow-main {
+          grid-area: main;
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: baseline;
+          column-gap: 10px;
+          row-gap: 2px;
+        }
+        /* Now that the row is full-width, let the name breathe instead of
+           truncating; meta chips wrap under it only when it is truly long. */
+        .crow .crow-name {
+          white-space: normal;
+          overflow: visible;
+          overflow-wrap: anywhere;
+        }
         .crow-pos {
-          width: 96px;
+          grid-area: pos;
+          width: auto;
+        }
+        /* Pull the chevron down so it sits on the position line, not centered
+           between the two lines. */
+        .crow-chevron-btn {
+          align-self: flex-end;
+          margin-bottom: 2px;
         }
         .crow-detail {
           padding-left: 14px;
@@ -4396,6 +4437,7 @@ class ViewScenarios extends i {
             <p class="section-desc">
               ${t(this.hass, "config_panel.scenarios_only_if_desc")}
             </p>
+            ${renderHelp(this.hass, "conditions_scope")}
             ${renderConditionEditor({
             hass: this.hass,
             conditions: draft.conditions,
@@ -4409,7 +4451,11 @@ class ViewScenarios extends i {
           </div>
           <div class="dialog-foot">
             ${draft.id
-            ? b `<label class="checkbox-row" style="margin:0">
+            ? b `<label
+                    class="checkbox-row"
+                    style="margin:0"
+                    title=${t(this.hass, "config_panel.scenarios_run_ignore_help")}
+                  >
                     <input
                       type="checkbox"
                       .checked=${this._runIgnoreConditions}

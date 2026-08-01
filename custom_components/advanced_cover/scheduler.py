@@ -122,6 +122,39 @@ def compute_occurrence_times(
     return base, planned
 
 
+def _is_terminal(run: AssignmentRun) -> bool:
+    """Return whether a run has a final outcome for today (executed/skipped/…)."""
+    return run.status in (RUN_STATE_DONE, RUN_STATE_EXPIRED)
+
+
+def apply_carryover(
+    occ: Occurrence,
+    prev_runs: dict[tuple[str, str], AssignmentRun],
+    prev_fired: bool,
+) -> None:
+    """Restore today's already-decided outcomes onto a freshly rebuilt occurrence.
+
+    A plan rebuild (triggered by any config save) recreates every run in the
+    idle state. To keep the Today view truthful, this copies the final
+    status/result/reason of runs that had already reached a terminal outcome
+    earlier today. Runs that were still armed or pending are intentionally left
+    idle so the catch-up logic can re-arm or re-fire them.
+
+    ``prev_runs`` is keyed by ``(scenario_id, cover_item_id)``. The occurrence is
+    marked ``fired`` only when it had fired before *and* every run is now
+    terminal, so a fully-decided scenario is not re-scheduled — while one with a
+    newly added cover or a still-armed run stays open.
+    """
+    for run in occ.runs.values():
+        prev = prev_runs.get((occ.scenario_id, run.cover_item_id))
+        if prev is not None and _is_terminal(prev):
+            run.status = prev.status
+            run.result = prev.result
+            run.reason = prev.reason
+    if prev_fired and occ.runs and all(_is_terminal(r) for r in occ.runs.values()):
+        occ.fired = True
+
+
 @dataclass
 class AssignmentRun:
     """Daily state of one (scenario, cover) assignment."""
@@ -217,6 +250,19 @@ class AdvancedCoverScheduler:
             self._midnight_unsub = None
         self._teardown_plan()
 
+    def _snapshot_terminal_runs(self) -> dict[tuple[str, str], AssignmentRun]:
+        """Capture runs that reached a final outcome, keyed by (scenario, cover).
+
+        Used to preserve today's decided outcomes across a plan rebuild so a
+        mid-day config save does not reset them to "skipped".
+        """
+        return {
+            (occ.scenario_id, run.cover_item_id): run
+            for occ in self._plan
+            for run in occ.runs.values()
+            if _is_terminal(run)
+        }
+
     def _teardown_plan(self) -> None:
         """Release all per-occurrence listeners/timers."""
         for occ in self._plan:
@@ -260,6 +306,10 @@ class AdvancedCoverScheduler:
         """Recompute today's plan; catch up occurrences with open retry windows."""
         async with self._lock:
             self._cancel_timer()
+            # Snapshot today's already-decided runs before tearing the plan
+            # down, so a mid-day config save does not wipe the outcome history.
+            prev_runs = self._snapshot_terminal_runs()
+            prev_fired = {occ.scenario_id: occ.fired for occ in self._plan}
             self._teardown_plan()
 
             data = self.coordinator.data_model
@@ -307,6 +357,9 @@ class AdvancedCoverScheduler:
                         target_tilt=action.tilt_position,
                         area_id=cover.area_id,
                     )
+                # Restore outcomes already decided earlier today, so a config
+                # save neither re-fires nor loses them.
+                apply_carryover(occ, prev_runs, prev_fired.get(scenario.id, False))
                 plan.append(occ)
 
             # Priority = scenario order in the panel; used for deterministic
@@ -329,6 +382,8 @@ class AdvancedCoverScheduler:
                 else:
                     occ.fired = True
                     for run in occ.runs.values():
+                        if _is_terminal(run):
+                            continue  # already decided earlier today
                         run.status = RUN_STATE_EXPIRED
                         run.result = RESULT_EXPIRED
                         run.reason = "trigger time already passed"
@@ -441,7 +496,7 @@ class AdvancedCoverScheduler:
         self, occ: Occurrence, run: AssignmentRun, *, first_fire: bool
     ) -> None:
         """Evaluate one assignment; execute, arm or finish it."""
-        if run.status in (RUN_STATE_DONE, RUN_STATE_EXPIRED):
+        if _is_terminal(run):
             return
         looked_up = self._scenario_and_assignment(occ, run.cover_item_id)
         if looked_up is None:

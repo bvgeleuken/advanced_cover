@@ -5,8 +5,18 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from custom_components.advanced_cover.const import (
+    RESULT_EXECUTED,
+    RESULT_SKIPPED,
+    RUN_STATE_ARMED,
+    RUN_STATE_DONE,
+    RUN_STATE_IDLE,
+)
 from custom_components.advanced_cover.models import Scenario, Trigger
 from custom_components.advanced_cover.scheduler import (
+    AssignmentRun,
+    Occurrence,
+    apply_carryover,
     compute_occurrence_times,
     deterministic_random_offset_min,
     parse_hh_mm,
@@ -122,3 +132,99 @@ def test_random_window_shifts_planned_but_not_base():
     assert 0 <= delta_min <= 30
     # And stable across recomputation:
     assert compute_occurrence_times(scenario, DAY, TZ, no_sun)[1] == planned
+
+
+# --------------------------------------------------------------- apply_carryover
+
+
+def make_run(cover_id: str, **kwargs) -> AssignmentRun:
+    run = AssignmentRun(cover_item_id=cover_id, cover_name=cover_id, target_position=0)
+    for key, value in kwargs.items():
+        setattr(run, key, value)
+    return run
+
+
+def make_occ(scenario_id: str, runs: list[AssignmentRun]) -> Occurrence:
+    at = datetime(2026, 7, 3, 20, 0, tzinfo=TZ)
+    occ = Occurrence(
+        scenario_id=scenario_id,
+        scenario_name=scenario_id,
+        base_at=at,
+        planned_at=at,
+        random_offset_min=0.0,
+        retry_until=None,
+    )
+    occ.runs = {r.cover_item_id: r for r in runs}
+    return occ
+
+
+def test_carryover_restores_terminal_outcomes():
+    # Fresh rebuild: run starts idle...
+    occ = make_occ("s1", [make_run("c1")])
+    # ...but earlier today it had already executed.
+    prev = {
+        ("s1", "c1"): make_run(
+            "c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED, reason="ok"
+        )
+    }
+    apply_carryover(occ, prev, prev_fired=True)
+    run = occ.runs["c1"]
+    assert run.status == RUN_STATE_DONE
+    assert run.result == RESULT_EXECUTED
+    assert run.reason == "ok"
+    assert occ.fired is True  # fully decided -> not re-scheduled
+
+
+def test_carryover_restores_skipped_reason():
+    occ = make_occ("s1", [make_run("c1")])
+    prev = {
+        ("s1", "c1"): make_run(
+            "c1", status=RUN_STATE_DONE, result=RESULT_SKIPPED, reason="window open"
+        )
+    }
+    apply_carryover(occ, prev, prev_fired=True)
+    assert occ.runs["c1"].result == RESULT_SKIPPED
+    assert occ.runs["c1"].reason == "window open"
+
+
+def test_carryover_ignores_non_terminal_prev_runs():
+    # A run that was still armed must NOT be frozen; it stays idle so the
+    # catch-up logic can re-arm it after the rebuild.
+    occ = make_occ("s1", [make_run("c1")])
+    prev = {("s1", "c1"): make_run("c1", status=RUN_STATE_ARMED, reason="waiting")}
+    apply_carryover(occ, prev, prev_fired=True)
+    assert occ.runs["c1"].status == RUN_STATE_IDLE
+    assert occ.runs["c1"].result is None
+    assert occ.fired is False  # not fully decided
+
+
+def test_carryover_partial_occurrence_stays_open():
+    # Scenario already fired for c1, but c2 was newly added: keep c1's result,
+    # leave the occurrence unfired so c2 can still run.
+    occ = make_occ("s1", [make_run("c1"), make_run("c2")])
+    prev = {
+        ("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)
+    }
+    apply_carryover(occ, prev, prev_fired=True)
+    assert occ.runs["c1"].result == RESULT_EXECUTED
+    assert occ.runs["c2"].status == RUN_STATE_IDLE
+    assert occ.fired is False
+
+
+def test_carryover_does_not_fire_when_never_fired_before():
+    occ = make_occ("s1", [make_run("c1")])
+    prev = {
+        ("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)
+    }
+    apply_carryover(occ, prev, prev_fired=False)
+    # Outcome is still restored...
+    assert occ.runs["c1"].result == RESULT_EXECUTED
+    # ...but we don't invent a fired flag it never had.
+    assert occ.fired is False
+
+
+def test_carryover_no_prev_is_noop():
+    occ = make_occ("s1", [make_run("c1")])
+    apply_carryover(occ, {}, prev_fired=False)
+    assert occ.runs["c1"].status == RUN_STATE_IDLE
+    assert occ.fired is False
