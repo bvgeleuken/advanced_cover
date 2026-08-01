@@ -202,9 +202,7 @@ def test_carryover_partial_occurrence_stays_open():
     # Scenario already fired for c1, but c2 was newly added: keep c1's result,
     # leave the occurrence unfired so c2 can still run.
     occ = make_occ("s1", [make_run("c1"), make_run("c2")])
-    prev = {
-        ("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)
-    }
+    prev = {("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)}
     apply_carryover(occ, prev, prev_fired=True)
     assert occ.runs["c1"].result == RESULT_EXECUTED
     assert occ.runs["c2"].status == RUN_STATE_IDLE
@@ -213,9 +211,7 @@ def test_carryover_partial_occurrence_stays_open():
 
 def test_carryover_does_not_fire_when_never_fired_before():
     occ = make_occ("s1", [make_run("c1")])
-    prev = {
-        ("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)
-    }
+    prev = {("s1", "c1"): make_run("c1", status=RUN_STATE_DONE, result=RESULT_EXECUTED)}
     apply_carryover(occ, prev, prev_fired=False)
     # Outcome is still restored...
     assert occ.runs["c1"].result == RESULT_EXECUTED
