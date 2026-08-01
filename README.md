@@ -21,7 +21,12 @@ Rule-based, scenario-driven automation for covers (shutters, venetian blinds, aw
 
 ## How it works
 
-Advanced Cover computes nothing itself (no weather, no presence detection). You point conditions at entities you already trust — an `input_select` weather helper, an `input_boolean` presence flag, a lux sensor. At each scenario's trigger time the conditions are evaluated against the *current* state; there is no history tracking and no manual-movement detection. The one deliberate exception: a failed run can stay **armed** inside its re-arm window and re-evaluate whenever one of the failing entities changes.
+You build two things in the panel — **covers** and **scenarios** — and Advanced Cover turns them into a deterministic daily plan.
+
+- **A cover** links one of your existing cover entities and adds what automation needs: its **facing** (azimuth, for sun-protection logic), an optional **window / contact sensor** with a built-in safety rule, an optional **low / discreet drive** (a slower, quieter motor path or a script), plus automatic capability detection (position / tilt / open-close only).
+- **A scenario** is one rule: a **trigger** at a fixed time or relative to the sun (sunrise / sunset / solar noon, ± offset, optional random window), optional **"only if" conditions**, a **target** position and tilt, and the **covers** it applies to — each cover with optional extra conditions and overrides.
+
+Advanced Cover brings no sensors of its own — no weather service, no presence detection, no lux. It **orchestrates the cover entities you already have**, driven by signals from helpers you already trust (a weather `input_select`, a presence `input_boolean`, a lux threshold sensor). Conditions are evaluated against the *current* state at trigger time. The one deliberate exception is the **re-arm window**: a scenario that just missed its conditions stays **armed** and re-checks whenever a failing entity changes — event-driven, no polling, at most once per day.
 
 ### The panel
 
@@ -43,6 +48,30 @@ Advanced Cover computes nothing itself (no weather, no presence detection). You 
 | Numeric value | "Only if `sensor.lux` is **above 40000**" |
 
 There is deliberately no AND/OR builder: within a scenario everything is AND; for OR you create a second scenario with the same trigger. This keeps configuration readable instead of turning it into programming.
+
+Conditions are evaluated **per cover**, not per scenario — see the FAQ below for what that means when one scenario drives several windows.
+
+## Screenshots
+
+**Today** — day timeline with live per-action status, master switch and sun times:
+
+![Today tab — day timeline and today's plan](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/today.png)
+
+**Covers** — one row per cover with capability detection (position / tilt / open-close only), window contact, low mode and inline test buttons:
+
+![Covers tab — cover list with capabilities and test buttons](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/covers.png)
+
+![Cover editor — capabilities, azimuth compass, low mode and window contact](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/cover_edit.png)
+
+**Scenarios** — every rule with its trigger, sun-phase bar and target position; drag to set priority:
+
+![Scenarios tab — scenario list](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenarios.png)
+
+![Scenario editor — When, Only if, Then and Covers](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenario_edit.png)
+
+**Log** — every execution, skip, wait and block with its reason:
+
+![Log tab — action log](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/log.png)
 
 ## Installation
 
@@ -133,6 +162,12 @@ They execute in panel list order (top first); the last executed action determine
 
 **Does the integration fight manual movements?**
 No. There is no manual-movement detection and cover-position conditions never re-arm. Use position conditions (baby-room rule) where manual overrides must be respected.
+
+**One scenario drives several windows with a shared "only if window contact is closed" — does one open window skip everything?**
+No. A scenario is a set of **independent per-cover actions**. Every condition — the scenario's "only if" and any per-cover condition — is evaluated **for each cover on its own**. A *window contact* condition uses that cover's own contact sensor, so "only if the contact is closed" skips only the covers whose window is open; the others still run (each logged with its reason). A condition on a *shared* entity (e.g. one weather helper) is identical for every cover, so it lets them all run or skips them all together. Often you don't even need the condition: the built-in **safety rule** already stops any single cover from closing past its ventilation position while its own window is open.
+
+**What does the "Ignore conditions" checkbox next to "Run now" do?**
+*Run now* fires the scenario immediately — a manual, ephemeral run that ignores the trigger time and never touches today's plan. Tick **Ignore conditions** to also bypass the "only if" checks, so every assigned cover moves to its target regardless of the current state — handy to preview positions or test a scenario at the "wrong" time of day. The safety rule still applies: an open window is never fully closed.
 
 ## Debug logging
 

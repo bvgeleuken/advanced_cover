@@ -1529,6 +1529,7 @@ export class ViewScenarios extends LitElement {
             <p class="section-desc">
               ${t(this.hass, "config_panel.scenarios_only_if_desc")}
             </p>
+            ${renderHelp(this.hass, "conditions_scope")}
             ${renderConditionEditor({
               hass: this.hass,
               conditions: draft.conditions,
@@ -1546,7 +1547,11 @@ export class ViewScenarios extends LitElement {
           </div>
           <div class="dialog-foot">
             ${draft.id
-              ? html`<label class="checkbox-row" style="margin:0">
+              ? html`<label
+                    class="checkbox-row"
+                    style="margin:0"
+                    title=${t(this.hass, "config_panel.scenarios_run_ignore_help")}
+                  >
                     <input
                       type="checkbox"
                       .checked=${this._runIgnoreConditions}
