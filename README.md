@@ -1,6 +1,6 @@
 [![CI](https://github.com/florianbaethge/advanced_cover/actions/workflows/ci.yml/badge.svg)](https://github.com/florianbaethge/advanced_cover/actions/workflows/ci.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/github/license/florianbaethge/advanced_cover)](https://github.com/florianbaethge/advanced_cover/blob/main/LICENSE)
 
 <p align="center">
   <img
@@ -55,23 +55,35 @@ Conditions are evaluated **per cover**, not per scenario — see the FAQ below f
 
 **Today** — day timeline with live per-action status, master switch and sun times:
 
-![Today tab — day timeline and today's plan](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/today.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/today.png" alt="Today tab — day timeline and today's plan" width="560">
+</p>
 
 **Covers** — one row per cover with capability detection (position / tilt / open-close only), window contact, low mode and inline test buttons:
 
-![Covers tab — cover list with capabilities and test buttons](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/covers.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/covers.png" alt="Covers tab — cover list with capabilities and test buttons" width="560">
+</p>
 
-![Cover editor — capabilities, azimuth compass, low mode and window contact](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/cover_edit.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/cover_edit.png" alt="Cover editor — capabilities, azimuth compass, low mode and window contact" width="380">
+</p>
 
 **Scenarios** — every rule with its trigger, sun-phase bar and target position; drag to set priority:
 
-![Scenarios tab — scenario list](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenarios.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenarios.png" alt="Scenarios tab — scenario list" width="560">
+</p>
 
-![Scenario editor — When, Only if, Then and Covers](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenario_edit.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/scenario_edit.png" alt="Scenario editor — When, Only if, Then and Covers" width="380">
+</p>
 
 **Log** — every execution, skip, wait and block with its reason:
 
-![Log tab — action log](https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/log.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/florianbaethge/advanced_cover/main/screenshots/log.png" alt="Log tab — action log" width="560">
+</p>
 
 ## Installation
 
