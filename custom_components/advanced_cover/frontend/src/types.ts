@@ -123,6 +123,7 @@ export interface CoverItem {
   azimuth: number | null;
   low_mode_entity_id: string | null;
   low_mode_script_id: string | null;
+  manual_low_mode: boolean;
   contact_entity_id: string | null;
   contact_state_map: Record<string, string>;
   safety: SafetyConfig;

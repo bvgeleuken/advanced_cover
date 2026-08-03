@@ -411,6 +411,16 @@
     "log_copy": "Kopieren",
     "log_copied": "Kopiert",
     "covers_dialog_basics": "Grundlagen",
-    "covers_azimuth_hint": "Der Azimut bestimmt, wann die Sonne auf dieses Fenster trifft — er wird von Sonnenschutz-Szenarien ausgewertet."
+    "covers_azimuth_hint": "Der Azimut bestimmt, wann die Sonne auf dieses Fenster trifft — er wird von Sonnenschutz-Szenarien ausgewertet.",
+    "reason_entity_unavailable": "Entität {entity} war nicht verfügbar — zur Sicherheit wurde nichts bewegt",
+    "reason_trigger_passed": "Auslösezeit war bereits vorbei (z. B. Neustart oder Neuberechnung nach der geplanten Zeit)",
+    "reason_already_at": "Bereits auf {pos}% — Bewegungen unter {delta}% werden zum Schutz des Motors übersprungen",
+    "reason_service_failed": "Home-Assistant-Serviceaufruf fehlgeschlagen: {error}",
+    "reason_master_off": "Der Automatik-Hauptschalter war ausgeschaltet",
+    "reason_cover_off": "Die Automatik ist für dieses Cover deaktiviert",
+    "reason_removed": "Das Cover oder Szenario wurde aus der Konfiguration entfernt",
+    "covers_manual_low": "Low-Modus für manuelle Steuerung",
+    "covers_manual_low_desc": "Die Pfeil-Buttons und der Test-Schieberegler steuern die Low-Speed-Entität/das Skript statt der normalen Cover-Entität. Stopp nutzt immer die normale Entität.",
+    "covers_manual_low_active": "Manuelle Steuerung nutzt den Low-Modus"
   }
 }

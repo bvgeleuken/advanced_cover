@@ -54,6 +54,9 @@ class ExecutionOutcome:
     result: str  # executed | skipped | blocked_safety | unavailable
     reason: str | None = None
     position: int | None = None  # the position actually commanded
+    # Entity that was missing/unavailable — lets the scheduler wait for it
+    # to come back instead of finishing the run for the day.
+    unavailable_entity_id: str | None = None
 
 
 def current_cover_position(state: State | None) -> int | None:
@@ -151,7 +154,10 @@ class CoverExecutor:
         state = self.hass.states.get(entity_id)
         if state is None or state.state == STATE_UNAVAILABLE:
             return ExecutionOutcome(
-                RESULT_UNAVAILABLE, f"{entity_id} is unavailable", target_position
+                RESULT_UNAVAILABLE,
+                f"{entity_id} is unavailable",
+                target_position,
+                unavailable_entity_id=entity_id,
             )
 
         caps = capabilities_from_state(state)
@@ -226,7 +232,10 @@ class CoverExecutor:
         state = self.hass.states.get(script_entity)
         if state is None or state.state == STATE_UNAVAILABLE:
             return ExecutionOutcome(
-                RESULT_UNAVAILABLE, f"{script_entity} is unavailable", position
+                RESULT_UNAVAILABLE,
+                f"{script_entity} is unavailable",
+                position,
+                unavailable_entity_id=script_entity,
             )
         object_id = script_entity.split(".", 1)[-1]
         try:

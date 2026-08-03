@@ -551,12 +551,29 @@ async def ws_cover_test(
         "close": SERVICE_CLOSE_COVER,
         "stop": SERVICE_STOP_COVER,
     }
-    if msg["command"] == "position":
+    command = msg["command"]
+    # Manual low mode: the panel controls drive the low-speed entity (or
+    # script) instead of the normal cover entity. Stop always goes to the
+    # normal entity — scripts cannot stop a running move.
+    entity_id = cover.cover_entity_id
+    if cover.manual_low_mode and cover.low_mode_entity_id:
+        entity_id = cover.low_mode_entity_id
+    elif cover.manual_low_mode and cover.low_mode_script_id and command != "stop":
+        position = {"open": 100, "close": 0}.get(command, msg.get("position", 50))
+        await hass.services.async_call(
+            "script",
+            cover.low_mode_script_id.split(".", 1)[-1],
+            {"position": position},
+            blocking=True,
+        )
+        connection.send_result(msg["id"], {"success": True})
+        return
+    if command == "position":
         await hass.services.async_call(
             COVER_DOMAIN,
             SERVICE_SET_COVER_POSITION,
             {
-                ATTR_ENTITY_ID: cover.cover_entity_id,
+                ATTR_ENTITY_ID: entity_id,
                 ATTR_POSITION: msg.get("position", 50),
             },
             blocking=True,
@@ -564,8 +581,8 @@ async def ws_cover_test(
     else:
         await hass.services.async_call(
             COVER_DOMAIN,
-            service_map[msg["command"]],
-            {ATTR_ENTITY_ID: cover.cover_entity_id},
+            service_map[command],
+            {ATTR_ENTITY_ID: entity_id},
             blocking=True,
         )
     connection.send_result(msg["id"], {"success": True})

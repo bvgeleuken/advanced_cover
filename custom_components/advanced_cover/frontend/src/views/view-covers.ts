@@ -3,6 +3,7 @@ import { compassStyles, formatAzimuth, renderCompass } from "../compass";
 import { deleteCover, probeCover, saveCover, testCover } from "../data/api";
 import { renderEntityDatalist } from "../entity-input";
 import { defineCustomElementOnce, formatApiError, formatTime } from "../helpers";
+import { formatReason } from "../reasons";
 import { renderHelp } from "../help";
 import { t } from "../i18n";
 import { sharedStyles } from "../styles";
@@ -40,6 +41,7 @@ function emptyDraft(): CoverItem {
     azimuth: null,
     low_mode_entity_id: null,
     low_mode_script_id: null,
+    manual_low_mode: false,
     contact_entity_id: null,
     contact_state_map: {},
     safety: { ventilation_position: 20, mode: "block", block_when_tilted: false },
@@ -261,8 +263,35 @@ export class ViewCovers extends LitElement {
       }
       .detail-actions {
         display: flex;
+        align-items: center;
         gap: 8px;
         margin-top: 12px;
+        flex-wrap: wrap;
+      }
+      .manual-low {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .manual-low ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .manual-low.dialog-row {
+        margin: 10px 0 0;
+        align-items: flex-start;
+      }
+      .manual-low.dialog-row ha-icon {
+        margin-top: 2px;
+      }
+      .low-tag {
+        --mdc-icon-size: 16px;
+        color: var(--primary-color);
+        align-self: center;
+        margin: 0 2px;
       }
       .today-actions {
         margin-top: 12px;
@@ -548,6 +577,18 @@ export class ViewCovers extends LitElement {
     }
   }
 
+  private async _toggleManualLow(cover: CoverRuntime): Promise<void> {
+    try {
+      await saveCover(this.hass, this.entryId, {
+        ...cover,
+        manual_low_mode: !cover.manual_low_mode,
+      });
+    } catch (e) {
+      this._error = formatApiError(e, this.hass);
+      this.requestUpdate();
+    }
+  }
+
   private async _test(
     coverId: string,
     command: "open" | "close" | "stop" | "position",
@@ -579,8 +620,17 @@ export class ViewCovers extends LitElement {
   // -------------------------------------------------------------- rendering
 
   private _renderControlGroup(cover: CoverRuntime) {
+    const low = cover.manual_low_mode &&
+      Boolean(cover.low_mode_entity_id || cover.low_mode_script_id);
     return html`
       <div class="icon-group" @click=${(e: Event) => e.stopPropagation()}>
+        ${low
+          ? html`<ha-icon
+              class="low-tag"
+              icon="mdi:tortoise"
+              title=${t(this.hass, "config_panel.covers_manual_low_active")}
+            ></ha-icon>`
+          : nothing}
         <button
           type="button"
           title=${t(this.hass, "config_panel.covers_test_open")}
@@ -789,6 +839,7 @@ export class ViewCovers extends LitElement {
                       : r.preflight?.verdict === "would_skip"
                         ? "armed"
                         : "planned"}"
+                    title=${(occ.fired && formatReason(this.hass, r.reason)) || ""}
                     >${t(
                       this.hass,
                       `config_panel.status_${
@@ -811,6 +862,19 @@ export class ViewCovers extends LitElement {
           <button class="btn-danger" @click=${() => this._delete(cover)}>
             ${t(this.hass, "config_panel.covers_delete")}
           </button>
+          ${cover.low_mode_entity_id || cover.low_mode_script_id
+            ? html`<label class="manual-low">
+                <ha-switch
+                  .checked=${cover.manual_low_mode}
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    this._toggleManualLow(cover);
+                  }}
+                ></ha-switch>
+                <ha-icon icon="mdi:tortoise"></ha-icon>
+                ${t(this.hass, "config_panel.covers_manual_low")}
+              </label>`
+            : nothing}
         </div>
       </div>
     `;
@@ -1126,6 +1190,24 @@ export class ViewCovers extends LitElement {
                 />
               </div>
             </div>
+            ${draft.low_mode_entity_id || draft.low_mode_script_id
+              ? html`<label class="manual-low dialog-row">
+                  <ha-switch
+                    .checked=${draft.manual_low_mode}
+                    @click=${() =>
+                      this._patchDraft({
+                        manual_low_mode: !this._draft?.manual_low_mode,
+                      })}
+                  ></ha-switch>
+                  <ha-icon icon="mdi:tortoise"></ha-icon>
+                  <span>
+                    ${t(this.hass, "config_panel.covers_manual_low")}
+                    <span class="section-desc" style="display:block;margin:0">
+                      ${t(this.hass, "config_panel.covers_manual_low_desc")}
+                    </span>
+                  </span>
+                </label>`
+              : nothing}
 
             ${!isAwning
               ? html`

@@ -21,7 +21,14 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    CoreState,
+    Event,
+    HomeAssistant,
+    callback,
+)
 from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_point_in_time,
@@ -37,6 +44,7 @@ from .const import (
     RESULT_ARMED,
     RESULT_EXPIRED,
     RESULT_SKIPPED,
+    RESULT_UNAVAILABLE,
     RUN_STATE_ARMED,
     RUN_STATE_DONE,
     RUN_STATE_EXPIRED,
@@ -229,8 +237,10 @@ class AdvancedCoverScheduler:
         self.coordinator = coordinator
         self.executor = executor
         self._plan: list[Occurrence] = []
+        self._plan_date: date | None = None
         self._timer_unsub: CALLBACK_TYPE | None = None
         self._midnight_unsub: CALLBACK_TYPE | None = None
+        self._started_unsub: CALLBACK_TYPE | None = None
         self._lock = asyncio.Lock()
         self._shutdown = False
 
@@ -238,7 +248,24 @@ class AdvancedCoverScheduler:
 
     async def async_setup(self) -> None:
         """Build today's plan (with restart catch-up) and start timers."""
-        await self.async_rebuild_plan()
+        if self.hass.state is CoreState.running:
+            await self.async_rebuild_plan()
+        else:
+            # During HA startup other integrations may not have added their
+            # entities yet; firing catch-up now would report every cover as
+            # unavailable. Build the plan for display only and defer the
+            # catch-up until HA has fully started.
+            await self.async_rebuild_plan(catch_up=False)
+
+            async def _on_started(_event: Event) -> None:
+                self._started_unsub = None
+                if self._shutdown:
+                    return
+                await self.async_rebuild_plan()
+
+            self._started_unsub = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _on_started
+            )
         self._schedule_midnight_rollover()
 
     async def async_shutdown(self) -> None:
@@ -248,6 +275,9 @@ class AdvancedCoverScheduler:
         if self._midnight_unsub:
             self._midnight_unsub()
             self._midnight_unsub = None
+        if self._started_unsub:
+            self._started_unsub()
+            self._started_unsub = None
         self._teardown_plan()
 
     def _snapshot_terminal_runs(self) -> dict[tuple[str, str], AssignmentRun]:
@@ -302,19 +332,25 @@ class AdvancedCoverScheduler:
         when = get_astral_event_date(self.hass, astral_event, day)
         return dt_util.as_local(when) if when else None
 
-    async def async_rebuild_plan(self) -> None:
+    async def async_rebuild_plan(self, *, catch_up: bool = True) -> None:
         """Recompute today's plan; catch up occurrences with open retry windows."""
         async with self._lock:
             self._cancel_timer()
+            now = dt_util.now()
+            today = now.date()
             # Snapshot today's already-decided runs before tearing the plan
             # down, so a mid-day config save does not wipe the outcome history.
-            prev_runs = self._snapshot_terminal_runs()
-            prev_fired = {occ.scenario_id: occ.fired for occ in self._plan}
+            # Outcomes never carry across days: at the midnight rollover (or a
+            # rebuild after a date change) the previous plan belongs to
+            # yesterday and every scenario must start fresh.
+            same_day = self._plan_date == today
+            prev_runs = self._snapshot_terminal_runs() if same_day else {}
+            prev_fired = (
+                {occ.scenario_id: occ.fired for occ in self._plan} if same_day else {}
+            )
             self._teardown_plan()
 
             data = self.coordinator.data_model
-            now = dt_util.now()
-            today = now.date()
             tz = dt_util.get_default_time_zone()
             weekday = WEEKDAYS[today.weekday()]
 
@@ -369,28 +405,36 @@ class AdvancedCoverScheduler:
             self._log_same_minute_conflicts(plan)
 
             self._plan = plan
+            self._plan_date = today
             self.coordinator.set_day_plan(plan)
 
             # Restart / rebuild catch-up: fire missed occurrences whose retry
-            # window is still open; expire the rest.
-            due_now: list[Occurrence] = []
-            for occ in plan:
-                if occ.planned_at > now:
-                    continue
-                if occ.retry_until and occ.retry_until > now:
-                    due_now.append(occ)
-                else:
-                    occ.fired = True
-                    for run in occ.runs.values():
-                        if _is_terminal(run):
-                            continue  # already decided earlier today
-                        run.status = RUN_STATE_EXPIRED
-                        run.result = RESULT_EXPIRED
-                        run.reason = "trigger time already passed"
+            # window is still open; expire the rest. Skipped while HA is still
+            # starting up (see async_setup) — the post-startup rebuild does it.
+            due_now = self._catch_up_missed(plan, now) if catch_up else []
 
         await self._async_fire_due(due_now)
         await self._async_schedule_next_timer()
         self.coordinator.notify_plan_changed()
+
+    @staticmethod
+    def _catch_up_missed(plan: list[Occurrence], now: datetime) -> list[Occurrence]:
+        """Split missed occurrences: due (open retry window) vs. expired."""
+        due_now: list[Occurrence] = []
+        for occ in plan:
+            if occ.planned_at > now:
+                continue
+            if occ.retry_until and occ.retry_until > now:
+                due_now.append(occ)
+            else:
+                occ.fired = True
+                for run in occ.runs.values():
+                    if _is_terminal(run):
+                        continue  # already decided earlier today
+                    run.status = RUN_STATE_EXPIRED
+                    run.result = RESULT_EXPIRED
+                    run.reason = "trigger time already passed"
+        return due_now
 
     def _log_same_minute_conflicts(self, plan: list[Occurrence]) -> None:
         """Log when two scenarios target the same cover in the same minute."""
@@ -524,6 +568,22 @@ class AdvancedCoverScheduler:
             outcome = await self.executor.async_execute(
                 cover, assignment.resolved_action(scenario.action)
             )
+            if (
+                outcome.result == RESULT_UNAVAILABLE
+                and outcome.unavailable_entity_id
+                and occ.retry_until is not None
+                and dt_util.now() < occ.retry_until
+            ):
+                # The target entity is missing/unavailable (e.g. its
+                # integration is still loading). Within the retry window,
+                # wait for it to come back instead of giving up for the day.
+                reason = outcome.reason or (
+                    f"{outcome.unavailable_entity_id} is unavailable"
+                )
+                self._arm_run(occ, run, {outcome.unavailable_entity_id}, reason)
+                if first_fire:
+                    self._log_run(occ, run, RESULT_ARMED, reason)
+                return
             self._finish_run(occ, run, outcome.result, outcome.reason)
             return
 
