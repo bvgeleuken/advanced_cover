@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { defineCustomElementOnce, formatTime } from "../helpers";
 import { t } from "../i18n";
+import { formatReason } from "../reasons";
 import { sharedStyles } from "../styles";
 import type { HomeAssistant, LogEntry, PanelSnapshot } from "../types";
 
@@ -253,7 +254,9 @@ export class ViewLog extends LitElement {
               : nothing}
           </div>
           <div class="log-line2">
-            ${e.scenario_name}${e.reason ? ` — ${e.reason}` : ""}
+            ${e.scenario_name}${e.reason
+              ? ` — ${formatReason(this.hass, e.reason)}`
+              : ""}
           </div>
         </div>
       </div>

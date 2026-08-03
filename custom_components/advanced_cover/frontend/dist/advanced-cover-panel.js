@@ -1172,6 +1172,42 @@ function renderEntityDatalist(hass, listId, domains, favorites = []) {
   `;
 }
 
+/** Localize a backend run/log reason into a human-readable explanation.
+
+    The backend stores technical English strings (entity ids, service
+    errors). Recognized patterns are mapped to translated texts; anything
+    unknown is shown verbatim so no reason is ever lost. */
+function formatReason(hass, reason) {
+    if (!reason)
+        return null;
+    let m = reason.match(/^(\S+) is unavailable$/);
+    if (m)
+        return t(hass, "config_panel.reason_entity_unavailable", { entity: m[1] });
+    if (reason === "trigger time already passed")
+        return t(hass, "config_panel.reason_trigger_passed");
+    m = reason.match(/^already at (\d+)% \(min delta (\d+)%\)$/);
+    if (m)
+        return t(hass, "config_panel.reason_already_at", {
+            pos: m[1],
+            delta: m[2],
+        });
+    m = reason.match(/^contact is (\w+); closing below (\d+)% is blocked$/);
+    if (m)
+        return t(hass, "config_panel.cond_sum_safety", { ventilation: m[2] });
+    m = reason.match(/^(?:service|script) call failed: ([\s\S]*)$/);
+    if (m)
+        return t(hass, "config_panel.reason_service_failed", { error: m[1] });
+    if (reason === "master switch is off")
+        return t(hass, "config_panel.reason_master_off");
+    if (reason === "cover automation is off")
+        return t(hass, "config_panel.reason_cover_off");
+    if (reason === "scenario or assignment removed" || reason === "cover removed")
+        return t(hass, "config_panel.reason_removed");
+    // Condition reasons from the engine ("sensor.x is 'on', expected …") are
+    // already descriptive; possibly a "; "-joined list.
+    return reason;
+}
+
 /**
  * Small expandable info block: a subtle info-icon summary that unfolds an
  * explanation paragraph. Translation keys:
@@ -1215,6 +1251,7 @@ function emptyDraft() {
         azimuth: null,
         low_mode_entity_id: null,
         low_mode_script_id: null,
+        manual_low_mode: false,
         contact_entity_id: null,
         contact_state_map: {},
         safety: { ventilation_position: 20, mode: "block", block_when_tilted: false },
@@ -1431,8 +1468,35 @@ class ViewCovers extends i {
       }
       .detail-actions {
         display: flex;
+        align-items: center;
         gap: 8px;
         margin-top: 12px;
+        flex-wrap: wrap;
+      }
+      .manual-low {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .manual-low ha-icon {
+        --mdc-icon-size: 18px;
+        color: var(--secondary-text-color);
+      }
+      .manual-low.dialog-row {
+        margin: 10px 0 0;
+        align-items: flex-start;
+      }
+      .manual-low.dialog-row ha-icon {
+        margin-top: 2px;
+      }
+      .low-tag {
+        --mdc-icon-size: 16px;
+        color: var(--primary-color);
+        align-self: center;
+        margin: 0 2px;
       }
       .today-actions {
         margin-top: 12px;
@@ -1689,6 +1753,18 @@ class ViewCovers extends i {
             this.requestUpdate();
         }
     }
+    async _toggleManualLow(cover) {
+        try {
+            await saveCover(this.hass, this.entryId, {
+                ...cover,
+                manual_low_mode: !cover.manual_low_mode,
+            });
+        }
+        catch (e) {
+            this._error = formatApiError(e, this.hass);
+            this.requestUpdate();
+        }
+    }
     async _test(coverId, command, position) {
         try {
             await testCover(this.hass, this.entryId, coverId, command, position);
@@ -1713,8 +1789,17 @@ class ViewCovers extends i {
     }
     // -------------------------------------------------------------- rendering
     _renderControlGroup(cover) {
+        const low = cover.manual_low_mode &&
+            Boolean(cover.low_mode_entity_id || cover.low_mode_script_id);
         return b `
       <div class="icon-group" @click=${(e) => e.stopPropagation()}>
+        ${low
+            ? b `<ha-icon
+              class="low-tag"
+              icon="mdi:tortoise"
+              title=${t(this.hass, "config_panel.covers_manual_low_active")}
+            ></ha-icon>`
+            : A}
         <button
           type="button"
           title=${t(this.hass, "config_panel.covers_test_open")}
@@ -1918,6 +2003,7 @@ class ViewCovers extends i {
                 : r.preflight?.verdict === "would_skip"
                     ? "armed"
                     : "planned"}"
+                    title=${(occ.fired && formatReason(this.hass, r.reason)) || ""}
                     >${t(this.hass, `config_panel.status_${occ.fired
                 ? r.status === "done"
                     ? (r.result ?? "skipped")
@@ -1934,6 +2020,19 @@ class ViewCovers extends i {
           <button class="btn-danger" @click=${() => this._delete(cover)}>
             ${t(this.hass, "config_panel.covers_delete")}
           </button>
+          ${cover.low_mode_entity_id || cover.low_mode_script_id
+            ? b `<label class="manual-low">
+                <ha-switch
+                  .checked=${cover.manual_low_mode}
+                  @click=${(e) => {
+                e.stopPropagation();
+                this._toggleManualLow(cover);
+            }}
+                ></ha-switch>
+                <ha-icon icon="mdi:tortoise"></ha-icon>
+                ${t(this.hass, "config_panel.covers_manual_low")}
+              </label>`
+            : A}
         </div>
       </div>
     `;
@@ -2230,6 +2329,23 @@ class ViewCovers extends i {
                 />
               </div>
             </div>
+            ${draft.low_mode_entity_id || draft.low_mode_script_id
+            ? b `<label class="manual-low dialog-row">
+                  <ha-switch
+                    .checked=${draft.manual_low_mode}
+                    @click=${() => this._patchDraft({
+                manual_low_mode: !this._draft?.manual_low_mode,
+            })}
+                  ></ha-switch>
+                  <ha-icon icon="mdi:tortoise"></ha-icon>
+                  <span>
+                    ${t(this.hass, "config_panel.covers_manual_low")}
+                    <span class="section-desc" style="display:block;margin:0">
+                      ${t(this.hass, "config_panel.covers_manual_low_desc")}
+                    </span>
+                  </span>
+                </label>`
+            : A}
 
             ${!isAwning
             ? b `
@@ -2648,7 +2764,9 @@ class ViewLog extends i {
             : A}
           </div>
           <div class="log-line2">
-            ${e.scenario_name}${e.reason ? ` — ${e.reason}` : ""}
+            ${e.scenario_name}${e.reason
+            ? ` — ${formatReason(this.hass, e.reason)}`
+            : ""}
           </div>
         </div>
       </div>
@@ -4771,7 +4889,27 @@ function occKind(occ) {
         return "unavailable";
     if (runs.some((r) => r.result === "executed"))
         return "executed";
+    if (runs.some((r) => r.result === "expired"))
+        return "expired";
     return "skipped";
+}
+/** Most common reason among a fired block's non-executed runs, localized. */
+function occReasonSummary(hass, occ) {
+    if (!occ.fired)
+        return null;
+    const counts = new Map();
+    for (const r of occ.assignments) {
+        if (r.result === "executed" || !r.reason)
+            continue;
+        counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!top)
+        return null;
+    const text = formatReason(hass, top[0]);
+    if (!text)
+        return null;
+    return top[1] > 1 ? `${text} (${top[1]}×)` : text;
 }
 /** Map a block kind to a timeline marker color class. */
 function timelineClass(kind) {
@@ -5126,8 +5264,31 @@ class ViewToday extends i {
       .cover-line .cover-dot.armed {
         background: var(--warning-color, #f0b23a);
       }
-      .cover-line .cover-dot.blocked_safety {
+      .cover-line .cover-dot.blocked_safety,
+      .cover-line .cover-dot.unavailable {
         background: var(--error-color, #d93025);
+      }
+      .cover-line .cover-badge {
+        flex-shrink: 0;
+      }
+      .cover-reason {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+        margin: 0 0 4px 16px;
+      }
+      .cover-reason.error {
+        color: var(--error-color, #d93025);
+      }
+      .cover-reason ha-icon {
+        --mdc-icon-size: 15px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .block-reason.error {
+        color: var(--error-color, #d93025);
       }
       .cover-line .cover-target {
         margin-left: auto;
@@ -5461,12 +5622,30 @@ class ViewToday extends i {
         const kind = runKind(occ, run);
         const safety = (run.preflight?.conditions ?? []).find((c) => c.scope === "safety" && c.ok === false);
         const cover = this.snapshot.covers.find((c) => c.id === run.cover_item_id);
+        // After firing, every non-executed run explains itself inline.
+        const reason = occ.fired && run.result !== "executed"
+            ? formatReason(this.hass, run.reason)
+            : null;
+        const severe = ["unavailable", "blocked_safety"].includes(kind);
         return b `
       <div class="cover-line">
         <span class="cover-dot ${kind}"></span>
         <span class="ellipsis">${run.cover_name}</span>
+        ${occ.fired
+            ? b `<span class="badge badge-${kind} cover-badge"
+              >${t(this.hass, `config_panel.status_${kind}`)}</span
+            >`
+            : A}
         <span class="cover-target">${run.target_position}%</span>
       </div>
+      ${reason
+            ? b `<div class="cover-reason ${severe ? "error" : ""}">
+            <ha-icon
+              icon=${severe ? "mdi:alert-outline" : "mdi:information-outline"}
+            ></ha-icon>
+            <span>${reason}</span>
+          </div>`
+            : A}
       ${safety
             ? b `<div class="cover-safety">
             <ha-icon icon="mdi:alert-outline"></ha-icon>
@@ -5483,7 +5662,9 @@ class ViewToday extends i {
     _renderBlock(occ) {
         const kind = occKind(occ);
         const expanded = this._isExpanded(occ);
-        const reason = !occ.fired ? preflightReason(this.hass, occ.preflight) : null;
+        const reason = !occ.fired
+            ? preflightReason(this.hass, occ.preflight)
+            : occReasonSummary(this.hass, occ);
         return b `
       <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
         <div class="block-head">
@@ -5518,7 +5699,12 @@ class ViewToday extends i {
             : A}
             </span>
               ${reason && !expanded
-            ? b `<span class="block-reason">${reason}</span>`
+            ? b `<span
+                    class="block-reason ${["unavailable", "blocked_safety"].includes(kind)
+                ? "error"
+                : ""}"
+                    >${reason}</span
+                  >`
             : A}
             </span>
           </button>
@@ -5623,7 +5809,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.5.3";
+const VERSION = "0.5.4";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

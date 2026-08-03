@@ -15,6 +15,7 @@ import {
   preflightReason,
   renderCondChecklist,
 } from "../preflight";
+import { formatReason } from "../reasons";
 import { sharedStyles } from "../styles";
 import { renderTimeline, timelineStyles, type TimelineEvent } from "../timeline";
 import type {
@@ -35,7 +36,23 @@ function occKind(occ: Occurrence): string {
   if (runs.some((r) => r.result === "blocked_safety")) return "blocked_safety";
   if (runs.some((r) => r.result === "unavailable")) return "unavailable";
   if (runs.some((r) => r.result === "executed")) return "executed";
+  if (runs.some((r) => r.result === "expired")) return "expired";
   return "skipped";
+}
+
+/** Most common reason among a fired block's non-executed runs, localized. */
+function occReasonSummary(hass: HomeAssistant, occ: Occurrence): string | null {
+  if (!occ.fired) return null;
+  const counts = new Map<string, number>();
+  for (const r of occ.assignments) {
+    if (r.result === "executed" || !r.reason) continue;
+    counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (!top) return null;
+  const text = formatReason(hass, top[0]);
+  if (!text) return null;
+  return top[1] > 1 ? `${text} (${top[1]}×)` : text;
 }
 
 /** Map a block kind to a timeline marker color class. */
@@ -398,8 +415,31 @@ export class ViewToday extends LitElement {
       .cover-line .cover-dot.armed {
         background: var(--warning-color, #f0b23a);
       }
-      .cover-line .cover-dot.blocked_safety {
+      .cover-line .cover-dot.blocked_safety,
+      .cover-line .cover-dot.unavailable {
         background: var(--error-color, #d93025);
+      }
+      .cover-line .cover-badge {
+        flex-shrink: 0;
+      }
+      .cover-reason {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+        margin: 0 0 4px 16px;
+      }
+      .cover-reason.error {
+        color: var(--error-color, #d93025);
+      }
+      .cover-reason ha-icon {
+        --mdc-icon-size: 15px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .block-reason.error {
+        color: var(--error-color, #d93025);
       }
       .cover-line .cover-target {
         margin-left: auto;
@@ -756,12 +796,31 @@ export class ViewToday extends LitElement {
       (c) => c.scope === "safety" && c.ok === false
     );
     const cover = this.snapshot.covers.find((c) => c.id === run.cover_item_id);
+    // After firing, every non-executed run explains itself inline.
+    const reason =
+      occ.fired && run.result !== "executed"
+        ? formatReason(this.hass, run.reason)
+        : null;
+    const severe = ["unavailable", "blocked_safety"].includes(kind);
     return html`
       <div class="cover-line">
         <span class="cover-dot ${kind}"></span>
         <span class="ellipsis">${run.cover_name}</span>
+        ${occ.fired
+          ? html`<span class="badge badge-${kind} cover-badge"
+              >${t(this.hass, `config_panel.status_${kind}`)}</span
+            >`
+          : nothing}
         <span class="cover-target">${run.target_position}%</span>
       </div>
+      ${reason
+        ? html`<div class="cover-reason ${severe ? "error" : ""}">
+            <ha-icon
+              icon=${severe ? "mdi:alert-outline" : "mdi:information-outline"}
+            ></ha-icon>
+            <span>${reason}</span>
+          </div>`
+        : nothing}
       ${safety
         ? html`<div class="cover-safety">
             <ha-icon icon="mdi:alert-outline"></ha-icon>
@@ -779,7 +838,9 @@ export class ViewToday extends LitElement {
   private _renderBlock(occ: Occurrence) {
     const kind = occKind(occ);
     const expanded = this._isExpanded(occ);
-    const reason = !occ.fired ? preflightReason(this.hass, occ.preflight) : null;
+    const reason = !occ.fired
+      ? preflightReason(this.hass, occ.preflight)
+      : occReasonSummary(this.hass, occ);
     return html`
       <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
         <div class="block-head">
@@ -814,7 +875,14 @@ export class ViewToday extends LitElement {
                 : nothing}
             </span>
               ${reason && !expanded
-                ? html`<span class="block-reason">${reason}</span>`
+                ? html`<span
+                    class="block-reason ${["unavailable", "blocked_safety"].includes(
+                      kind
+                    )
+                      ? "error"
+                      : ""}"
+                    >${reason}</span
+                  >`
                 : nothing}
             </span>
           </button>

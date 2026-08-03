@@ -422,6 +422,9 @@ class CoverItem:
     azimuth: int | None = None
     low_mode_entity_id: str | None = None
     low_mode_script_id: str | None = None
+    # Manual panel controls (test buttons/slider) drive the low-mode
+    # entity/script instead of the normal cover entity.
+    manual_low_mode: bool = False
     contact_entity_id: str | None = None
     contact_state_map: dict[str, str] = field(default_factory=dict)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
@@ -438,6 +441,7 @@ class CoverItem:
             "azimuth": self.azimuth,
             "low_mode_entity_id": self.low_mode_entity_id,
             "low_mode_script_id": self.low_mode_script_id,
+            "manual_low_mode": self.manual_low_mode,
             "contact_entity_id": self.contact_entity_id,
             "contact_state_map": dict(self.contact_state_map),
             "safety": self.safety.to_dict(),
@@ -458,6 +462,7 @@ class CoverItem:
             azimuth=_clamp_opt(data.get("azimuth"), 0, 359),
             low_mode_entity_id=_str_or_none(data.get("low_mode_entity_id")),
             low_mode_script_id=_str_or_none(data.get("low_mode_script_id")),
+            manual_low_mode=bool(data.get("manual_low_mode", False)),
             contact_entity_id=_str_or_none(data.get("contact_entity_id")),
             contact_state_map=contact_map,
             safety=SafetyConfig.from_dict(data.get("safety") or {}),
