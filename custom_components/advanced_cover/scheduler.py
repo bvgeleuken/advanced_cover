@@ -377,9 +377,7 @@ class AdvancedCoverScheduler:
             )
             if _is_terminal(stub):
                 runs[(scenario_id, cover_item_id)] = stub
-        fired = {
-            str(sid): bool(f) for sid, f in (data.get("fired") or {}).items()
-        }
+        fired = {str(sid): bool(f) for sid, f in (data.get("fired") or {}).items()}
         return runs, fired
 
     def _snapshot_terminal_runs(self) -> dict[tuple[str, str], AssignmentRun]:

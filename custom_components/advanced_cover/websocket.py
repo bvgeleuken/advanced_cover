@@ -505,9 +505,7 @@ def ws_trigger_preview(
         )
         return
     base = scheduler.resolve_trigger_base(trigger, today)
-    connection.send_result(
-        msg["id"], {"time": base.isoformat() if base else None}
-    )
+    connection.send_result(msg["id"], {"time": base.isoformat() if base else None})
 
 
 @websocket_api.websocket_command(

@@ -180,13 +180,9 @@ def _check_sun_position(
         if sun.elevation is None:
             return "sun elevation is unavailable"
         if cond.above is not None and sun.elevation <= cond.above:
-            return (
-                f"sun elevation {sun.elevation:.1f}° is not above {cond.above:g}°"
-            )
+            return f"sun elevation {sun.elevation:.1f}° is not above {cond.above:g}°"
         if cond.below is not None and sun.elevation >= cond.below:
-            return (
-                f"sun elevation {sun.elevation:.1f}° is not below {cond.below:g}°"
-            )
+            return f"sun elevation {sun.elevation:.1f}° is not below {cond.below:g}°"
     if cond.az_mode != AZ_MODE_OFF:
         if cond.az_from is None or cond.az_to is None:
             return "invalid condition: missing azimuth window"
@@ -199,10 +195,7 @@ def _check_sun_position(
             return "invalid condition: missing azimuth window"
         start, end = window
         if not _az_in_window(sun.azimuth, start, end):
-            return (
-                f"sun azimuth {sun.azimuth:.0f}° is outside "
-                f"{start:.0f}°-{end:.0f}°"
-            )
+            return f"sun azimuth {sun.azimuth:.0f}° is outside {start:.0f}°-{end:.0f}°"
     return None
 
 
