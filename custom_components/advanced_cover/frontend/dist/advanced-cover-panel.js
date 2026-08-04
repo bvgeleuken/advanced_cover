@@ -31,6 +31,13 @@ const subscribeState = (hass, entryId, onState) => hass.connection?.subscribeMes
     type: `${D}/subscribe`,
     entry_id: entryId,
 });
+/** Resolve a (draft) trigger to today's base time via the scheduler's solver. */
+const previewTrigger = (hass, entryId, trigger, coverItemIds) => hass.callWS({
+    type: `${D}/trigger/preview`,
+    entry_id: entryId,
+    trigger,
+    ...(coverItemIds?.length ? { cover_item_ids: coverItemIds } : {}),
+});
 const saveConfig = (hass, entryId, config) => hass.callWS({ type: `${D}/config/save`, entry_id: entryId, config });
 const saveCover = (hass, entryId, cover) => hass.callWS({ type: `${D}/covers/save`, entry_id: entryId, cover });
 const deleteCover = (hass, entryId, coverItemId) => hass.callWS({
@@ -1197,6 +1204,12 @@ function formatReason(hass, reason) {
     m = reason.match(/^(?:service|script) call failed: ([\s\S]*)$/);
     if (m)
         return t(hass, "config_panel.reason_service_failed", { error: m[1] });
+    if (reason === "waiting for the sun to reach the facade direction")
+        return t(hass, "config_panel.reason_waiting_facade");
+    if (reason === "no facade direction configured")
+        return t(hass, "config_panel.reason_no_facade");
+    if (reason === "sun does not reach this facade today")
+        return t(hass, "config_panel.reason_sun_not_reaching");
     if (reason === "master switch is off")
         return t(hass, "config_panel.reason_master_off");
     if (reason === "cover automation is off")
@@ -1206,6 +1219,32 @@ function formatReason(hass, reason) {
     // Condition reasons from the engine ("sensor.x is 'on', expected …") are
     // already descriptive; possibly a "; "-joined list.
     return reason;
+}
+/** Classify a backend reason for display prominence.
+
+    "noise" = expected everyday outcomes (trigger already passed, cover was
+    already in position) that the status badge fully covers — hidden from
+    the reason lines. "error" = something is actually wrong and deserves
+    color. Everything else is "info": useful context, rendered muted. */
+function reasonSeverity(reason) {
+    if (!reason)
+        return "info";
+    // The safety reason itself contains "; " — match it before splitting.
+    if (/^contact is \w+; closing below \d+% is blocked$/.test(reason)) {
+        return "error";
+    }
+    let severity = "noise";
+    for (const part of reason.split("; ")) {
+        if (/ is unavailable$/.test(part) ||
+            /^(?:service|script) call failed:/.test(part)) {
+            return "error";
+        }
+        if (part !== "trigger time already passed" &&
+            !/^already at \d+% \(min delta \d+%\)$/.test(part)) {
+            severity = "info";
+        }
+    }
+    return severity;
 }
 
 /**
@@ -2784,6 +2823,15 @@ function emptyCondition(type) {
             return { type, accepted: ["closed"] };
         case "numeric_state":
             return { type, entity_id: "", above: null, below: null };
+        case "sun_position":
+            return {
+                type,
+                above: 20,
+                below: null,
+                az_mode: "relative",
+                az_from: -45,
+                az_to: 45,
+            };
         default:
             return { type, entity_id: "", states: [] };
     }
@@ -2985,6 +3033,63 @@ function renderCondition(opts, cond, index) {
         />
       `;
             break;
+        case "sun_position": {
+            const numInput = (value, patchKey, min, max) => b `
+        <input
+          type="number"
+          min=${min}
+          max=${max}
+          style="width:80px"
+          .value=${value == null ? "" : String(value)}
+          @input=${(e) => {
+                const raw = e.target.value;
+                update(opts, index, { [patchKey]: raw === "" ? null : Number(raw) });
+            }}
+        />
+      `;
+            const azMode = cond.az_mode ?? "off";
+            const relHint = azMode !== "relative"
+                ? A
+                : opts.coverAzimuth === undefined
+                    ? b `<span class="muted">${t(hass, "config_panel.cond_sun_rel_generic")}</span>`
+                    : opts.coverAzimuth === null
+                        ? b `<span class="muted warn">${t(hass, "config_panel.cond_sun_rel_missing")}</span>`
+                        : b `<span class="muted">
+                  ${t(hass, "config_panel.cond_sun_rel_hint", {
+                            az: opts.coverAzimuth,
+                        })}
+                </span>`;
+            body = b `
+        <span>${t(hass, "config_panel.cond_sun_prefix")}</span>
+        <span>${t(hass, "config_panel.cond_sun_above")}</span>
+        ${numInput(cond.above, "above", -90, 90)}
+        <span>${t(hass, "config_panel.cond_sun_below")}</span>
+        ${numInput(cond.below, "below", -90, 90)}
+        <span>${t(hass, "config_panel.cond_sun_deg_suffix")}</span>
+        <select
+          .value=${azMode}
+          @change=${(e) => update(opts, index, {
+                az_mode: e.target
+                    .value,
+            })}
+        >
+          ${["off", "absolute", "relative"].map((m) => b `<option value=${m} ?selected=${azMode === m}>
+              ${t(hass, `config_panel.cond_sun_az_mode_${m}`)}
+            </option>`)}
+        </select>
+        ${azMode === "off"
+                ? A
+                : b `
+              <span>${t(hass, "config_panel.cond_sun_from")}</span>
+              ${numInput(cond.az_from, "az_from", azMode === "relative" ? -180 : 0, azMode === "relative" ? 180 : 359)}
+              <span>${t(hass, "config_panel.cond_sun_to")}</span>
+              ${numInput(cond.az_to, "az_to", azMode === "relative" ? -180 : 0, azMode === "relative" ? 180 : 359)}
+              <span>°</span>
+              ${relHint}
+            `}
+      `;
+            break;
+        }
         default:
             body = b `<span class="muted">?</span>`;
     }
@@ -3010,6 +3115,7 @@ function renderConditionEditor(opts) {
         "entity_state_not",
         "cover_position",
         "numeric_state",
+        "sun_position",
         ...(opts.contactAvailable ? ["contact"] : []),
     ];
     return b `
@@ -3152,12 +3258,24 @@ function emptyScenario() {
         weekdays: [...WEEKDAYS],
         conditions: [],
         retry_window_min: 0,
-        action: { position: 0, tilt_position: null, mode: "normal", min_position_delta: null },
+        action: {
+            position: 0,
+            tilt_position: null,
+            mode: "normal",
+            min_position_delta: null,
+            safety_override: null,
+        },
         assignments: [],
     };
 }
 function emptyOverride() {
-    return { position: null, tilt_position: null, mode: null, min_position_delta: null };
+    return {
+        position: null,
+        tilt_position: null,
+        mode: null,
+        min_position_delta: null,
+        safety_override: null,
+    };
 }
 class ViewScenarios extends i {
     constructor() {
@@ -3179,7 +3297,26 @@ class ViewScenarios extends i {
     }; }
     static { this.styles = [
         sharedStyles,
+        compassStyles,
         i$3 `
+      .deg-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .deg-sign {
+        color: var(--secondary-text-color);
+      }
+      .inline-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .inline-field-label {
+        font-size: 0.8rem;
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+      }
       .srow {
         display: flex;
         align-items: stretch;
@@ -3489,11 +3626,27 @@ class ViewScenarios extends i {
         return this.snapshot.plan.find((o) => o.scenario_id === s.id);
     }
     _triggerSummary(s) {
-        const trig = s.trigger.type === "fixed_time"
-            ? (s.trigger.time_local ?? "")
-            : `${t(this.hass, `config_panel.sun_${s.trigger.sun_event}`)}${s.trigger.offset_min
-                ? ` ${s.trigger.offset_min > 0 ? "+" : ""}${s.trigger.offset_min} min`
-                : ""}`;
+        const offset = s.trigger.offset_min
+            ? ` ${s.trigger.offset_min > 0 ? "+" : ""}${s.trigger.offset_min} min`
+            : "";
+        let trig;
+        if (s.trigger.type === "fixed_time") {
+            trig = s.trigger.time_local ?? "";
+        }
+        else if (s.trigger.type === "sun_azimuth") {
+            const off = s.trigger.azimuth_offset_deg ?? 0;
+            const target = s.trigger.az_relative
+                ? `${t(this.hass, "config_panel.cond_sun_rel_short")} ${off > 0 ? `+${off}` : off}°`
+                : formatAzimuth(s.trigger.azimuth_deg ?? 180);
+            trig = `${t(this.hass, "config_panel.trigger_sun_azimuth")} ${target}${offset}`;
+        }
+        else if (s.trigger.type === "sun_elevation") {
+            const arrow = (s.trigger.elevation_dir ?? "falling") === "rising" ? "↑" : "↓";
+            trig = `${t(this.hass, "config_panel.trigger_sun_elevation")} ${arrow} ${s.trigger.elevation_deg ?? 0}°${offset}`;
+        }
+        else {
+            trig = `${t(this.hass, `config_panel.sun_${s.trigger.sun_event}`)}${offset}`;
+        }
         const random = s.random_window_min ? ` ± ${s.random_window_min} min` : "";
         const days = s.weekdays.length === 7
             ? t(this.hass, "config_panel.weekdays_all")
@@ -3515,6 +3668,21 @@ class ViewScenarios extends i {
                 return `${t(this.hass, "config_panel.cond_type_contact")}: ${(cond.accepted ?? [])
                     .map((s) => t(this.hass, `config_panel.contact_${s}`))
                     .join("/")}`;
+            case "sun_position": {
+                const parts = [];
+                if (cond.above != null)
+                    parts.push(`> ${cond.above}°`);
+                if (cond.below != null)
+                    parts.push(`< ${cond.below}°`);
+                if (cond.az_mode === "absolute") {
+                    parts.push(`${cond.az_from ?? 0}°–${cond.az_to ?? 0}°`);
+                }
+                else if (cond.az_mode === "relative") {
+                    const sign = (n) => (n > 0 ? `+${n}` : `${n}`);
+                    parts.push(`${t(this.hass, "config_panel.cond_sun_rel_short")} ${sign(cond.az_from ?? 0)}°…${sign(cond.az_to ?? 0)}°`);
+                }
+                return `${t(this.hass, "config_panel.cond_type_sun_position")}: ${parts.join(" · ")}`;
+            }
             default:
                 return "";
         }
@@ -3970,20 +4138,17 @@ class ViewScenarios extends i {
       <div class="section-title">${t(this.hass, "config_panel.scenarios_when")}</div>
       <div class="row">
         <div class="seg">
-          <button
-            type="button"
-            class=${draft.trigger.type === "fixed_time" ? "selected" : ""}
-            @click=${() => this._patch({ trigger: { ...draft.trigger, type: "fixed_time" } })}
-          >
-            ${t(this.hass, "config_panel.trigger_fixed_time")}
-          </button>
-          <button
-            type="button"
-            class=${draft.trigger.type === "sun_event" ? "selected" : ""}
-            @click=${() => this._patch({ trigger: { ...draft.trigger, type: "sun_event" } })}
-          >
-            ${t(this.hass, "config_panel.trigger_sun")}
-          </button>
+          ${["fixed_time", "sun_event", "sun_azimuth", "sun_elevation"].map((tt) => b `
+              <button
+                type="button"
+                class=${draft.trigger.type === tt ? "selected" : ""}
+                @click=${() => this._patch({ trigger: { ...draft.trigger, type: tt } })}
+              >
+                ${t(this.hass, tt === "sun_event"
+            ? "config_panel.trigger_sun"
+            : `config_panel.trigger_${tt}`)}
+              </button>
+            `)}
         </div>
         ${draft.trigger.type === "fixed_time"
             ? b `<input
@@ -3997,41 +4162,28 @@ class ViewScenarios extends i {
                 },
             })}
             />`
-            : b `
-              <select
-                style="width:auto"
-                .value=${draft.trigger.sun_event ?? "sunset"}
-                @change=${(e) => this._patch({
-                trigger: {
-                    ...draft.trigger,
-                    sun_event: e.target
-                        .value,
-                },
-            })}
-              >
-                ${["sunrise", "sunset", "solar_noon"].map((ev) => b `<option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
-                    ${t(this.hass, `config_panel.sun_${ev}`)}
-                  </option>`)}
-              </select>
-              <div>
-                <label class="field-label"
-                  >${t(this.hass, "config_panel.scenarios_offset_min")}</label
+            : draft.trigger.type === "sun_event"
+                ? b `
+                <select
+                  style="width:auto"
+                  .value=${draft.trigger.sun_event ?? "sunset"}
+                  @change=${(e) => this._patch({
+                    trigger: {
+                        ...draft.trigger,
+                        sun_event: e.target
+                            .value,
+                    },
+                })}
                 >
-                <input
-                  type="number"
-                  min="-720"
-                  max="720"
-                  style="width:90px"
-                  .value=${String(draft.trigger.offset_min ?? 0)}
-                  @input=${(e) => this._patch({
-                trigger: {
-                    ...draft.trigger,
-                    offset_min: Number(e.target.value),
-                },
-            })}
-                />
-              </div>
-            `}
+                  ${["sunrise", "sunset", "solar_noon"].map((ev) => b `<option value=${ev} ?selected=${draft.trigger.sun_event === ev}>
+                      ${t(this.hass, `config_panel.sun_${ev}`)}
+                    </option>`)}
+                </select>
+                ${this._renderOffsetField(draft)}
+              `
+                : draft.trigger.type === "sun_azimuth"
+                    ? this._renderSunAzimuthFields(draft)
+                    : this._renderSunElevationFields(draft)}
       </div>
       ${this._renderLivePreview(draft)}
 
@@ -4099,8 +4251,182 @@ class ViewScenarios extends i {
       ${renderHelp(this.hass, "retry")}
     `;
     }
+    _renderOffsetField(draft) {
+        return b `
+      <span class="inline-field">
+        <span class="inline-field-label"
+          >${t(this.hass, "config_panel.scenarios_offset_min")}</span
+        >
+        <input
+          type="number"
+          min="-720"
+          max="720"
+          style="width:80px"
+          .value=${String(draft.trigger.offset_min ?? 0)}
+          @input=${(e) => this._patch({
+            trigger: {
+                ...draft.trigger,
+                offset_min: Number(e.target.value),
+            },
+        })}
+        />
+      </span>
+    `;
+    }
+    /** Number input with a degree sign attached tightly to its right edge. */
+    _degInput(value, min, max, onInput) {
+        return b `
+      <span class="deg-wrap">
+        <input
+          type="number"
+          min=${min}
+          max=${max}
+          style="width:80px"
+          .value=${String(value)}
+          @input=${(e) => onInput(Number(e.target.value))}
+        />
+        <span class="deg-sign">°</span>
+      </span>
+    `;
+    }
+    _renderSunAzimuthFields(draft) {
+        const relative = draft.trigger.az_relative ?? false;
+        const deg = draft.trigger.azimuth_deg ?? 180;
+        return b `
+      <div>
+        <div class="chips" style="margin-bottom:8px">
+          ${[false, true].map((rel) => b `<button
+              type="button"
+              class="chip ${relative === rel ? "selected" : ""}"
+              @click=${() => this._patch({ trigger: { ...draft.trigger, az_relative: rel } })}
+            >
+              ${t(this.hass, rel
+            ? "config_panel.trigger_az_mode_facade"
+            : "config_panel.trigger_az_mode_compass")}
+            </button>`)}
+        </div>
+        ${relative
+            ? b `
+              <div class="row">
+                <span class="inline-field-label"
+                  >${t(this.hass, "config_panel.trigger_facade_offset")}</span
+                >
+                ${this._degInput(draft.trigger.azimuth_offset_deg ?? 0, -180, 180, (v) => this._patch({
+                trigger: { ...draft.trigger, azimuth_offset_deg: v },
+            }))}
+                ${this._renderOffsetField(draft)}
+              </div>
+              <p class="section-desc">
+                ${t(this.hass, "config_panel.trigger_facade_hint")}
+              </p>
+            `
+            : b `
+              ${renderCompass(deg, (d) => {
+                if (d != null) {
+                    this._patch({ trigger: { ...draft.trigger, azimuth_deg: d } });
+                }
+            })}
+              <div class="row" style="justify-content:center">
+                ${this._degInput(deg, 0, 359, (v) => this._patch({ trigger: { ...draft.trigger, azimuth_deg: v } }))}
+                ${this._renderOffsetField(draft)}
+              </div>
+              <p class="section-desc">
+                ${t(this.hass, "config_panel.trigger_sun_az_hint")}
+              </p>
+            `}
+      </div>
+    `;
+    }
+    _renderSunElevationFields(draft) {
+        return b `
+      <select
+        style="width:auto"
+        .value=${draft.trigger.elevation_dir ?? "falling"}
+        @change=${(e) => this._patch({
+            trigger: {
+                ...draft.trigger,
+                elevation_dir: e.target
+                    .value,
+            },
+        })}
+      >
+        ${["rising", "falling"].map((d) => b `<option
+            value=${d}
+            ?selected=${(draft.trigger.elevation_dir ?? "falling") === d}
+          >
+            ${t(this.hass, `config_panel.trigger_dir_${d}`)}
+          </option>`)}
+      </select>
+      ${this._degInput(draft.trigger.elevation_deg ?? 0, -20, 89, (v) => this._patch({ trigger: { ...draft.trigger, elevation_deg: v } }))}
+      ${this._renderOffsetField(draft)}
+    `;
+    }
+    _maybePreviewSun(draft) {
+        const trig = draft.trigger;
+        const coverIds = trig.type === "sun_azimuth" && trig.az_relative
+            ? draft.assignments.map((a) => a.cover_item_id)
+            : [];
+        const key = JSON.stringify([trig, coverIds]);
+        if (key === this._previewKey)
+            return;
+        this._previewKey = key;
+        window.clearTimeout(this._previewTimer);
+        this._previewTimer = window.setTimeout(async () => {
+            try {
+                const res = await previewTrigger(this.hass, this.entryId, trig, coverIds);
+                if (this._previewKey === key) {
+                    this._preview = res;
+                    this.requestUpdate();
+                }
+            }
+            catch {
+                /* preview is best-effort */
+            }
+        }, 250);
+    }
     /** Live preview of today's computed trigger time under the WHEN section. */
     _renderLivePreview(draft) {
+        const trig = draft.trigger;
+        if (trig.type === "sun_azimuth" || trig.type === "sun_elevation") {
+            // Draft triggers are resolved server-side by the scheduler's own
+            // solver, so the preview works before the scenario is saved.
+            this._maybePreviewSun(draft);
+            const pv = this._preview;
+            if (pv === undefined)
+                return A;
+            const relative = trig.type === "sun_azimuth" && trig.az_relative;
+            const missing = relative && pv.missing?.length
+                ? b `<p
+            class="section-desc"
+            style="margin-top:2px;color:var(--warning-color,#b58c00)"
+          >
+            ${t(this.hass, "config_panel.trigger_facade_missing", {
+                    covers: pv.missing.join(", "),
+                })}
+          </p>`
+                : A;
+            if (relative && !draft.assignments.length) {
+                return b `<p class="section-desc" style="margin-top:6px">
+          ${t(this.hass, "config_panel.trigger_facade_no_covers")}
+        </p>`;
+            }
+            if (pv.time === null) {
+                return b `<p
+            class="section-desc"
+            style="margin-top:6px;color:var(--warning-color,#b58c00)"
+          >
+            ${t(this.hass, "config_panel.scenarios_today_none")}
+          </p>
+          ${missing}`;
+            }
+            const range = relative && pv.time_last && pv.time_last !== pv.time
+                ? `${formatTime(pv.time)}–${formatTime(pv.time_last)}`
+                : formatTime(pv.time);
+            return b `<p class="section-desc" style="margin-top:6px">
+          ${t(this.hass, "config_panel.scenarios_today_at", { time: range })}
+        </p>
+        ${missing}`;
+        }
         if (!draft.id)
             return A;
         const occ = this._occFor(draft);
@@ -4213,6 +4539,44 @@ class ViewScenarios extends i {
         </div>
       </div>
       ${renderHelp(this.hass, "mode_low")}
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label class="field-label"
+            >${t(this.hass, "config_panel.scenarios_safety_override")}</label
+          >
+          <select
+            style="width:auto"
+            @change=${(e) => {
+            const value = e.target.value;
+            this._patch({
+                action: {
+                    ...draft.action,
+                    safety_override: value === "" ? null : value,
+                },
+            });
+        }}
+          >
+            <option value="" ?selected=${draft.action.safety_override == null}>
+              ${t(this.hass, "config_panel.safety_override_inherit")}
+            </option>
+            <option
+              value="block"
+              ?selected=${draft.action.safety_override === "block"}
+            >
+              ${t(this.hass, "config_panel.safety_override_block")}
+            </option>
+            <option
+              value="clamp"
+              ?selected=${draft.action.safety_override === "clamp"}
+            >
+              ${t(this.hass, "config_panel.safety_override_clamp")}
+            </option>
+          </select>
+        </div>
+      </div>
+      <p class="section-desc">
+        ${t(this.hass, "config_panel.scenarios_safety_override_hint")}
+      </p>
       <details class="expand">
         <summary>${t(this.hass, "config_panel.scenarios_advanced")}</summary>
         <div class="row" style="margin-top:8px">
@@ -4270,7 +4634,10 @@ class ViewScenarios extends i {
     _renderAssignment(draft, assignment, index) {
         const cover = this.snapshot.covers.find((c) => c.id === assignment.cover_item_id);
         const ov = assignment.action_override ?? emptyOverride();
-        const hasOverride = ov.position != null || ov.tilt_position != null || ov.mode != null;
+        const hasOverride = ov.position != null ||
+            ov.tilt_position != null ||
+            ov.mode != null ||
+            ov.safety_override != null;
         return b `
       <div class="assignment-box">
         <div class="assignment-head">
@@ -4312,6 +4679,7 @@ class ViewScenarios extends i {
             onChange: (conds) => this._patchAssignment(index, { extra_conditions: conds }),
             entityListId: "ac-all-entities",
             contactAvailable: Boolean(cover?.contact_entity_id),
+            coverAzimuth: cover ? cover.azimuth : undefined,
         })}
           <div class="section-title">
             ${t(this.hass, "config_panel.scenarios_override")}
@@ -4390,6 +4758,41 @@ class ViewScenarios extends i {
                 </option>
               </select>
             </div>
+            ${cover?.contact_entity_id
+            ? b `<div>
+                  <label class="field-label"
+                    >${t(this.hass, "config_panel.scenarios_safety_override")}</label
+                  >
+                  <select
+                    style="width:auto"
+                    @change=${(e) => {
+                const value = e.target.value;
+                this._patchAssignment(index, {
+                    action_override: {
+                        ...ov,
+                        safety_override: value === "" ? null : value,
+                    },
+                });
+            }}
+                  >
+                    <option value="" ?selected=${ov.safety_override == null}>
+                      ${t(this.hass, "config_panel.scenarios_inherit")}
+                    </option>
+                    <option
+                      value="block"
+                      ?selected=${ov.safety_override === "block"}
+                    >
+                      ${t(this.hass, "config_panel.safety_override_block")}
+                    </option>
+                    <option
+                      value="clamp"
+                      ?selected=${ov.safety_override === "clamp"}
+                    >
+                      ${t(this.hass, "config_panel.safety_override_clamp")}
+                    </option>
+                  </select>
+                </div>`
+            : A}
           </div>
         </details>
       </div>
@@ -4696,6 +5099,17 @@ function renderTimeline(opts) {
           <span class="tl-now-dot"></span>
         </div>
         ${opts.events.map((ev) => {
+        if (ev.spanEndMinute == null || ev.spanEndMinute <= ev.minute) {
+            return A;
+        }
+        const left = (ev.minute / 1440) * 100;
+        const width = ((Math.min(ev.spanEndMinute, 1440) - ev.minute) / 1440) * 100;
+        return b `<span
+            class="tl-span"
+            style="left:${left}%;width:${width}%"
+          ></span>`;
+    })}
+        ${opts.events.map((ev) => {
         const left = (ev.minute / 1440) * 100;
         const row = rows.get(ev.id) ?? 0;
         return b `
@@ -4847,6 +5261,23 @@ const timelineStyles = i$3 `
   .tl-marker.unavailable .tl-dot {
     background: var(--error-color, #d93025);
   }
+  /* Partially fine: executed covers next to blocked/unavailable ones. */
+  .tl-marker.executed_partial .tl-dot {
+    background: var(--success-color, #43a047);
+    border-color: var(--error-color, #d93025);
+  }
+  /* Retry window: the span in which a missed occurrence still re-tries. */
+  .tl-span {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 16%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--warning-color, #f0b23a) 45%, transparent);
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 1;
+  }
   .tl-axis {
     position: relative;
     height: 14px;
@@ -4893,13 +5324,49 @@ function occKind(occ) {
         return "expired";
     return "skipped";
 }
-/** Most common reason among a fired block's non-executed runs, localized. */
+/** Per-result counts of a fired block's runs, in display order.
+
+    Unknown result strings are appended verbatim so no outcome is ever
+    silently dropped from the badge row. */
+const COUNT_ORDER = [
+    "executed",
+    "armed",
+    "skipped",
+    "expired",
+    "unavailable",
+    "blocked_safety",
+];
+function occStatusCounts(occ) {
+    const counts = new Map();
+    for (const r of occ.assignments) {
+        const kind = r.status === "armed" ? "armed" : (r.result ?? "skipped");
+        counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    const ordered = COUNT_ORDER.filter((k) => counts.has(k)).map((k) => [k, counts.get(k)]);
+    for (const [k, n] of counts) {
+        if (!COUNT_ORDER.includes(k))
+            ordered.push([k, n]);
+    }
+    return ordered;
+}
+/** Most common reason among a fired block's non-executed runs, localized.
+
+    Everyday outcomes ("trigger already passed", "already in position") are
+    left out entirely — the status badge says it all; a wall of orange text
+    on every block would drown out the reasons that matter. Shown collapsed
+    only when the whole block failed: as soon as one cover executed, the
+    problem is per-cover, the count badges tell the story and the details
+    live in the expanded view. */
 function occReasonSummary(hass, occ) {
     if (!occ.fired)
+        return null;
+    if (occ.assignments.some((r) => r.result === "executed"))
         return null;
     const counts = new Map();
     for (const r of occ.assignments) {
         if (r.result === "executed" || !r.reason)
+            continue;
+        if (reasonSeverity(r.reason) === "noise")
             continue;
         counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1);
     }
@@ -4911,10 +5378,20 @@ function occReasonSummary(hass, occ) {
         return null;
     return top[1] > 1 ? `${text} (${top[1]}×)` : text;
 }
-/** Map a block kind to a timeline marker color class. */
-function timelineClass(kind) {
+/** Map a block to a timeline marker color class.
+
+    A fired block with executed covers *and* real problems (blocked /
+    unavailable) renders as a green dot with a red ring: mostly fine, but
+    something needs attention. */
+function timelineClass(occ) {
+    const kind = occKind(occ);
     if (kind === "would_run")
         return "will_run";
+    if (occ.fired && occ.assignments.some((r) => r.result === "executed")) {
+        const problems = occ.assignments.some((r) => ["blocked_safety", "unavailable"].includes(r.result ?? ""));
+        if (problems)
+            return "executed_partial";
+    }
     return kind;
 }
 /** Per-cover run kind for the grouped list. */
@@ -5110,6 +5587,22 @@ class ViewToday extends i {
       .legend .dot.skipped {
         background: var(--disabled-text-color, #6d7476);
       }
+      .legend .dot.executed_partial {
+        width: 11px;
+        height: 11px;
+        background: var(--success-color, #43a047);
+        border: 2px solid var(--error-color, #d93025);
+        box-sizing: border-box;
+      }
+      .legend .swatch-retry {
+        width: 16px;
+        height: 9px;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--warning-color, #f0b23a) 16%, transparent);
+        border: 1px dashed
+          color-mix(in srgb, var(--warning-color, #f0b23a) 55%, transparent);
+        box-sizing: border-box;
+      }
       /* Plan blocks. */
       .plan-toolbar {
         display: flex;
@@ -5192,7 +5685,7 @@ class ViewToday extends i {
       }
       .block-reason {
         font-size: 0.8rem;
-        color: var(--warning-color, #f0b23a);
+        color: var(--secondary-text-color);
       }
       .block-edit,
       .block-chevron-btn {
@@ -5289,6 +5782,12 @@ class ViewToday extends i {
       }
       .block-reason.error {
         color: var(--error-color, #d93025);
+      }
+      .cover-line .cover-fire-at {
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
       }
       .cover-line .cover-target {
         margin-left: auto;
@@ -5504,12 +6003,22 @@ class ViewToday extends i {
             const m = minutesOfDay(occ.planned_at);
             if (m == null)
                 return null;
+            // Retry window: visualize when a not-yet-decided occurrence would
+            // still re-try (upcoming blocks and blocks with armed runs).
+            let spanEndMinute = null;
+            if (occ.retry_until &&
+                (!occ.fired || occ.assignments.some((r) => r.status === "armed"))) {
+                const end = minutesOfDay(occ.retry_until);
+                // A window past midnight clamps to the end of today's strip.
+                spanEndMinute = end == null || end <= m ? 1440 : end;
+            }
             return {
                 id: ViewToday._occKey(occ),
                 minute: m,
-                colorClass: timelineClass(occKind(occ)),
+                colorClass: timelineClass(occ),
                 label: `${formatTime(occ.planned_at)} · ${occ.scenario_name}`,
                 timeLabel: formatTime(occ.planned_at),
+                spanEndMinute,
                 onClick: () => this._scrollToBlock(occ),
             };
         })
@@ -5533,6 +6042,8 @@ class ViewToday extends i {
             <span><span class="dot will_run"></span>${t(this.hass, "config_panel.today_legend_will_run")}</span>
             <span><span class="dot would_skip"></span>${t(this.hass, "config_panel.today_legend_would_skip")}</span>
             <span><span class="dot skipped"></span>${t(this.hass, "config_panel.today_legend_skipped")}</span>
+            <span><span class="dot executed_partial"></span>${t(this.hass, "config_panel.today_legend_partial")}</span>
+            <span><span class="swatch-retry"></span>${t(this.hass, "config_panel.today_legend_retry")}</span>
           </span>
         </div>
         <div class="card-content">
@@ -5622,11 +6133,14 @@ class ViewToday extends i {
         const kind = runKind(occ, run);
         const safety = (run.preflight?.conditions ?? []).find((c) => c.scope === "safety" && c.ok === false);
         const cover = this.snapshot.covers.find((c) => c.id === run.cover_item_id);
-        // After firing, every non-executed run explains itself inline.
-        const reason = occ.fired && run.result !== "executed"
+        // After firing, a non-executed run explains itself inline — except for
+        // everyday outcomes (trigger passed, already in position), where the
+        // status badge alone is enough and a repeated hint per cover is noise.
+        const severity = reasonSeverity(run.reason);
+        const reason = occ.fired && run.result !== "executed" && severity !== "noise"
             ? formatReason(this.hass, run.reason)
             : null;
-        const severe = ["unavailable", "blocked_safety"].includes(kind);
+        const severe = ["unavailable", "blocked_safety"].includes(kind) || severity === "error";
         return b `
       <div class="cover-line">
         <span class="cover-dot ${kind}"></span>
@@ -5635,6 +6149,9 @@ class ViewToday extends i {
             ? b `<span class="badge badge-${kind} cover-badge"
               >${t(this.hass, `config_panel.status_${kind}`)}</span
             >`
+            : A}
+        ${run.status === "armed" && run.fire_at
+            ? b `<span class="cover-fire-at">≈ ${formatTime(run.fire_at)}</span>`
             : A}
         <span class="cover-target">${run.target_position}%</span>
       </div>
@@ -5742,10 +6259,17 @@ class ViewToday extends i {
     `;
     }
     _renderResultBadge(occ) {
-        const kind = occKind(occ);
-        return b `<span class="badge badge-${kind}"
-      >${t(this.hass, `config_panel.status_${kind}`)}</span
-    >`;
+        const counts = occStatusCounts(occ);
+        if (counts.length <= 1) {
+            const kind = occKind(occ);
+            return b `<span class="badge badge-${kind}"
+        >${t(this.hass, `config_panel.status_${kind}`)}</span
+      >`;
+        }
+        // Mixed outcomes: one count badge per result ("13× Executed · 1× Blocked").
+        return counts.map(([kind, n]) => b `<span class="badge badge-${kind}"
+        >${n}× ${t(this.hass, `config_panel.status_${kind}`)}</span
+      >`);
     }
     _renderPlanCard() {
         const snap = this.snapshot;
@@ -5809,7 +6333,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.5.4";
+const VERSION = "0.6.0";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

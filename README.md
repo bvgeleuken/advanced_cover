@@ -129,7 +129,8 @@ All services accept an optional `config_entry_id` (needed only with multiple ent
 - **At most once per day** — each (scenario, cover) pair executes at most once per day. Flap protection belongs into your helpers (see recipes), ping-pong is impossible by construction.
 - **Idempotent** — `min position delta` skips moves when the cover is already close enough to the target (protects motors, avoids twitching after restarts).
 - **Deterministic** — the full day plan including random offsets is computed at midnight, seeded with date + scenario id. The Today tab shows exact times; a restart re-enters open re-arm windows instead of losing them.
-- **Safety rule, not disableable** — with an open contact, automatic closing below the ventilation position is blocked (or clamped). Tilted does not block by default (configurable per cover). Opening and manual control are never restricted.
+- **Restart-proof** — today's outcomes and the action log are persisted, so a Home Assistant restart neither wipes the day's history nor re-reports fired scenarios as "expired".
+- **Safety rule, not disableable** — with an open contact, automatic closing below the ventilation position is blocked (or clamped). Tilted does not block by default (configurable per cover). Opening and manual control are never restricted. Whether a blocked move stays put or still closes to the ventilation position can be chosen per scenario and overridden per assignment; within the re-arm window a blocked cover retries as soon as the window is closed.
 
 ## Recipes
 

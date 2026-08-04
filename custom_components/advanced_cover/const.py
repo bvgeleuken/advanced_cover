@@ -53,12 +53,27 @@ CONTACT_KINDS: Final = frozenset(
 # --- Triggers ---
 TRIGGER_FIXED_TIME: Final = "fixed_time"
 TRIGGER_SUN_EVENT: Final = "sun_event"
-TRIGGER_TYPES: Final = (TRIGGER_FIXED_TIME, TRIGGER_SUN_EVENT)
+TRIGGER_SUN_AZIMUTH: Final = "sun_azimuth"
+TRIGGER_SUN_ELEVATION: Final = "sun_elevation"
+TRIGGER_TYPES: Final = (
+    TRIGGER_FIXED_TIME,
+    TRIGGER_SUN_EVENT,
+    TRIGGER_SUN_AZIMUTH,
+    TRIGGER_SUN_ELEVATION,
+)
 
 SUN_EVENT_SUNRISE: Final = "sunrise"
 SUN_EVENT_SUNSET: Final = "sunset"
 SUN_EVENT_SOLAR_NOON: Final = "solar_noon"
 SUN_EVENTS: Final = (SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET, SUN_EVENT_SOLAR_NOON)
+
+# Sun elevation trigger: which of the (up to) two daily crossings is meant.
+SUN_DIR_RISING: Final = "rising"
+SUN_DIR_FALLING: Final = "falling"
+SUN_DIRECTIONS: Final = (SUN_DIR_RISING, SUN_DIR_FALLING)
+
+# The Home Assistant sun entity (source of live azimuth/elevation).
+SUN_ENTITY_ID: Final = "sun.sun"
 
 RANDOM_DIRECTION_AFTER: Final = "after"
 RANDOM_DIRECTION_BEFORE: Final = "before"
@@ -77,13 +92,21 @@ COND_ENTITY_STATE_NOT: Final = "entity_state_not"
 COND_COVER_POSITION: Final = "cover_position"
 COND_CONTACT: Final = "contact"
 COND_NUMERIC_STATE: Final = "numeric_state"
+COND_SUN_POSITION: Final = "sun_position"
 CONDITION_TYPES: Final = (
     COND_ENTITY_STATE,
     COND_ENTITY_STATE_NOT,
     COND_COVER_POSITION,
     COND_CONTACT,
     COND_NUMERIC_STATE,
+    COND_SUN_POSITION,
 )
+
+# Azimuth window mode of the sun_position condition.
+AZ_MODE_OFF: Final = "off"
+AZ_MODE_ABSOLUTE: Final = "absolute"
+AZ_MODE_RELATIVE: Final = "relative"
+AZ_MODES: Final = (AZ_MODE_OFF, AZ_MODE_ABSOLUTE, AZ_MODE_RELATIVE)
 
 POSITION_OP_ABOVE: Final = "above"
 POSITION_OP_BELOW: Final = "below"

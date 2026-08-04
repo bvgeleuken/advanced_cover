@@ -45,7 +45,8 @@ export type ConditionType =
   | "entity_state_not"
   | "cover_position"
   | "contact"
-  | "numeric_state";
+  | "numeric_state"
+  | "sun_position";
 
 export interface Condition {
   type: ConditionType;
@@ -57,13 +58,29 @@ export interface Condition {
   accepted?: string[];
   above?: number | null;
   below?: number | null;
+  az_mode?: "off" | "absolute" | "relative";
+  az_from?: number | null;
+  az_to?: number | null;
 }
 
 export interface Trigger {
-  type: "fixed_time" | "sun_event";
+  type: "fixed_time" | "sun_event" | "sun_azimuth" | "sun_elevation";
   time_local?: string;
   sun_event?: "sunrise" | "sunset" | "solar_noon";
   offset_min?: number;
+  azimuth_deg?: number;
+  az_relative?: boolean;
+  azimuth_offset_deg?: number;
+  elevation_deg?: number;
+  elevation_dir?: "rising" | "falling";
+}
+
+/** Result of the trigger/preview WS command. */
+export interface TriggerPreview {
+  time: string | null;
+  time_last?: string | null;
+  times?: Array<{ cover_item_id: string; name: string; time: string | null }>;
+  missing?: string[];
 }
 
 export interface CoverAction {
@@ -71,6 +88,10 @@ export interface CoverAction {
   tilt_position: number | null;
   mode: "normal" | "low";
   min_position_delta: number | null;
+  /** Safety-rule behavior when the window contact blocks this closing move:
+      null = the cover's own setting, "block" = stay put, "clamp" = close to
+      the ventilation position. */
+  safety_override: "block" | "clamp" | null;
 }
 
 export interface ActionOverride {
@@ -78,6 +99,7 @@ export interface ActionOverride {
   tilt_position: number | null;
   mode: "normal" | "low" | null;
   min_position_delta: number | null;
+  safety_override: "block" | "clamp" | null;
 }
 
 export interface Assignment {
@@ -178,6 +200,7 @@ export interface AssignmentRun {
   result: string | null;
   reason: string | null;
   armed_until: string | null;
+  fire_at: string | null;
   waiting_for: string[];
   preflight: Preflight | null;
 }

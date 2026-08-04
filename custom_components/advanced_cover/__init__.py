@@ -37,12 +37,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Advanced Cover from a config entry."""
     from homeassistant.const import Platform
+    from homeassistant.util import dt as dt_util
 
     from .coordinator import AdvancedCoverCoordinator
     from .executor import CoverExecutor
     from .models import EntryConfig, EntryData
     from .scheduler import AdvancedCoverScheduler
-    from .store import AdvancedCoverStore
+    from .store import AdvancedCoverRuntimeStore, AdvancedCoverStore
 
     platforms: list[Platform] = [
         Platform.SWITCH,
@@ -61,7 +62,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await store.async_load(initial=initial)
 
-    coordinator = AdvancedCoverCoordinator(hass, entry, store)
+    runtime_store = AdvancedCoverRuntimeStore(hass, entry.entry_id)
+    await runtime_store.async_load()
+
+    coordinator = AdvancedCoverCoordinator(hass, entry, store, runtime_store)
+    # Restore today's action log before anything can append to it.
+    coordinator.restore_action_log(dt_util.now().date())
     executor = CoverExecutor(hass, store.data.config.default_min_position_delta)
     scheduler = AdvancedCoverScheduler(hass, coordinator, executor)
 
@@ -147,8 +153,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete the store file when the entry is removed."""
-    from .store import AdvancedCoverStore
+    """Delete the store files when the entry is removed."""
+    from .store import AdvancedCoverRuntimeStore, AdvancedCoverStore
 
     store = AdvancedCoverStore(hass, entry.entry_id)
     await store.async_remove()
+    runtime_store = AdvancedCoverRuntimeStore(hass, entry.entry_id)
+    await runtime_store.async_remove()

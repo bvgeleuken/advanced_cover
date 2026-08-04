@@ -147,3 +147,105 @@ def test_condition_external_entities():
     assert Condition(
         type="numeric_state", entity_id="sensor.lux", above=100
     ).external_entity_ids() == ["sensor.lux"]
+
+
+def test_sun_trigger_round_trip_and_clamps():
+    from custom_components.advanced_cover.models import Trigger
+
+    az = Trigger.from_dict(
+        {"type": "sun_azimuth", "azimuth_deg": 200, "offset_min": -15}
+    )
+    assert az.to_dict() == {
+        "type": "sun_azimuth",
+        "azimuth_deg": 200,
+        "offset_min": -15,
+    }
+
+    el = Trigger.from_dict(
+        {"type": "sun_elevation", "elevation_deg": 27.5, "elevation_dir": "falling"}
+    )
+    assert el.to_dict() == {
+        "type": "sun_elevation",
+        "elevation_deg": 27.5,
+        "elevation_dir": "falling",
+        "offset_min": 0,
+    }
+
+    clamped = Trigger.from_dict(
+        {"type": "sun_azimuth", "azimuth_deg": 720, "elevation_deg": 999}
+    )
+    assert clamped.azimuth_deg == 359
+    assert clamped.elevation_deg == 90.0
+    # Unknown direction falls back to the default.
+    bad_dir = Trigger.from_dict({"type": "sun_elevation", "elevation_dir": "sideways"})
+    assert bad_dir.elevation_dir == "falling"
+
+
+def test_sun_condition_round_trip_and_defaults():
+    from custom_components.advanced_cover.models import Condition
+
+    cond = Condition.from_dict(
+        {
+            "type": "sun_position",
+            "above": 15,
+            "az_mode": "relative",
+            "az_from": -45,
+            "az_to": 60,
+        }
+    )
+    assert cond.to_dict() == {
+        "type": "sun_position",
+        "above": 15.0,
+        "below": None,
+        "az_mode": "relative",
+        "az_from": -45.0,
+        "az_to": 60.0,
+    }
+    assert cond.external_entity_ids() == ["sun.sun"]
+    # Unknown az_mode falls back to off.
+    bad = Condition.from_dict({"type": "sun_position", "az_mode": "diagonal"})
+    assert bad.az_mode == "off"
+
+
+def test_relative_sun_trigger_round_trip():
+    from custom_components.advanced_cover.models import Trigger
+
+    rel = Trigger.from_dict(
+        {"type": "sun_azimuth", "az_relative": True, "azimuth_offset_deg": -45}
+    )
+    assert rel.to_dict() == {
+        "type": "sun_azimuth",
+        "az_relative": True,
+        "azimuth_offset_deg": -45,
+        "offset_min": 0,
+    }
+    # Offset clamped into [-180, 180]; absolute mode omits relative fields.
+    clamped = Trigger.from_dict(
+        {"type": "sun_azimuth", "az_relative": True, "azimuth_offset_deg": 400}
+    )
+    assert clamped.azimuth_offset_deg == 180
+    absolute = Trigger.from_dict({"type": "sun_azimuth", "azimuth_deg": 90})
+    assert "az_relative" not in absolute.to_dict()
+
+
+def test_cover_action_safety_override_round_trip():
+    action = CoverAction.from_dict({"position": 0, "safety_override": "clamp"})
+    assert action.safety_override == "clamp"
+    assert CoverAction.from_dict(action.to_dict()).safety_override == "clamp"
+    # Unknown values fall back to None (= use the cover's own safety mode).
+    assert CoverAction.from_dict({"safety_override": "bogus"}).safety_override is None
+    assert CoverAction.from_dict({}).safety_override is None
+
+
+def test_action_override_safety_override_inherits_and_wins():
+    default = CoverAction(position=0, safety_override="clamp")
+    plain = Assignment(cover_item_id="c1")
+    assert plain.resolved_action(default).safety_override == "clamp"
+
+    overridden = Assignment(
+        cover_item_id="c1", action_override=ActionOverride(safety_override="block")
+    )
+    assert overridden.resolved_action(default).safety_override == "block"
+    # A safety override alone keeps the override non-empty (survives from_dict).
+    assert ActionOverride(safety_override="block").is_empty() is False
+    assert Assignment.from_dict(overridden.to_dict()).action_override is not None

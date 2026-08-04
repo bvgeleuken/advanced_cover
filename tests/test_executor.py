@@ -273,3 +273,29 @@ def test_unavailable_cover_is_reported(loop):
         executor.async_execute(make_cover(), CoverAction(position=0))
     )
     assert outcome.result == "unavailable"
+
+
+def test_safety_override_clamp_beats_cover_block_mode(loop):
+    hass = _hass_with_contact(cover_pos=80, contact_state="on")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(
+            _contact_cover(mode="block"),
+            CoverAction(position=0, safety_override="clamp"),
+        )
+    )
+    assert outcome.result == "executed"
+    assert hass.services.calls[-1][2]["position"] == 20
+
+
+def test_safety_override_block_beats_cover_clamp_mode(loop):
+    hass = _hass_with_contact(cover_pos=80, contact_state="on")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(
+            _contact_cover(mode="clamp"),
+            CoverAction(position=0, safety_override="block"),
+        )
+    )
+    assert outcome.result == "blocked_safety"
+    assert hass.services.calls == []

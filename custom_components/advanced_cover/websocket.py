@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -30,21 +31,29 @@ from .capabilities import (
     get_cover_capabilities,
     resolve_contact_state,
 )
-from .const import CONTACT_OPEN, CONTACT_TILTED, DOMAIN
+from .const import (
+    CONTACT_OPEN,
+    CONTACT_TILTED,
+    DOMAIN,
+    SAFETY_MODE_CLAMP,
+    SUN_ENTITY_ID,
+)
 from .coordinator import AdvancedCoverCoordinator
 from .engine import (
     SCOPE_ASSIGNMENT,
     SCOPE_SCENARIO,
     VERDICT_WOULD_RUN,
     CoverContext,
+    SunContext,
     disabled_condition_eval,
     evaluate_conditions_detailed,
     rollup_preflight,
+    safety_clamp_eval,
     safety_condition_eval,
     safety_would_block,
 )
 from .executor import current_cover_position
-from .models import CoverItem, EntryConfig, EntryData, Scenario, new_id
+from .models import CoverItem, EntryConfig, EntryData, Scenario, Trigger, new_id
 from .scheduler import AdvancedCoverScheduler
 
 _LOGGER = logging.getLogger(__name__)
@@ -104,6 +113,25 @@ def _cover_context(hass: HomeAssistant, cover: CoverItem) -> CoverContext:
         position=position,
         contact=_resolved_contact(hass, cover) or "unknown",
         contact_entity_id=cover.contact_entity_id,
+        azimuth=cover.azimuth,
+    )
+
+
+def _sun_context(hass: HomeAssistant) -> SunContext:
+    """Live sun snapshot for the engine (same shape as the scheduler's)."""
+    state = hass.states.get(SUN_ENTITY_ID)
+    if state is None:
+        return SunContext()
+
+    def _num(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    return SunContext(
+        azimuth=_num(state.attributes.get("azimuth")),
+        elevation=_num(state.attributes.get("elevation")),
     )
 
 
@@ -166,7 +194,11 @@ def _assignment_preflight(
         return rollup_preflight([disabled_condition_eval(SCOPE_ASSIGNMENT)], now_iso)
     ctx = _cover_context(hass, cover)
     evals = evaluate_conditions_detailed(
-        assignment.extra_conditions, _get_state(hass), ctx, SCOPE_ASSIGNMENT
+        assignment.extra_conditions,
+        _get_state(hass),
+        ctx,
+        SCOPE_ASSIGNMENT,
+        _sun_context(hass),
     )
     if cover.contact_entity_id:
         blocked = safety_would_block(
@@ -177,12 +209,22 @@ def _assignment_preflight(
             current_position=ctx.position,
         )
         if blocked:
-            evals.append(
-                safety_condition_eval(
-                    blocked=True,
-                    ventilation_position=cover.safety.ventilation_position,
+            resolved = assignment.resolved_action(scenario.action)
+            mode = resolved.safety_override or cover.safety.mode
+            if mode == SAFETY_MODE_CLAMP:
+                # Clamp mode still runs — show what will happen, not a blocker.
+                evals.append(
+                    safety_clamp_eval(
+                        ventilation_position=cover.safety.ventilation_position
+                    )
                 )
-            )
+            else:
+                evals.append(
+                    safety_condition_eval(
+                        blocked=True,
+                        ventilation_position=cover.safety.ventilation_position,
+                    )
+                )
     return rollup_preflight(evals, now_iso)
 
 
@@ -201,7 +243,11 @@ def _enrich_occurrence(
         block_evals = [disabled_condition_eval(SCOPE_SCENARIO)]
     else:
         block_evals = evaluate_conditions_detailed(
-            scenario.conditions, _get_state(hass), CoverContext(), SCOPE_SCENARIO
+            scenario.conditions,
+            _get_state(hass),
+            CoverContext(),
+            SCOPE_SCENARIO,
+            _sun_context(hass),
         )
     block_pf = rollup_preflight(block_evals, now_iso)
     occ_dict["preflight"] = block_pf
@@ -310,6 +356,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_scenario_reorder)
     websocket_api.async_register_command(hass, ws_scenario_run)
     websocket_api.async_register_command(hass, ws_recalculate)
+    websocket_api.async_register_command(hass, ws_trigger_preview)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/entries/list"})
@@ -390,6 +437,77 @@ def ws_subscribe(
     connection.subscriptions[msg["id"]] = coordinator.async_add_listener(_push)
     connection.send_result(msg["id"])
     _push()
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/trigger/preview",
+        vol.Optional("entry_id"): str,
+        vol.Required("trigger"): dict,
+        vol.Optional("cover_item_ids"): [str],
+    }
+)
+@websocket_api.require_admin
+@callback
+def ws_trigger_preview(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Resolve a (draft) trigger to today's base time for the editor preview.
+
+    Uses the scheduler's own resolver, so the preview can never disagree
+    with what the plan will compute. ``time`` is ``None`` when the trigger
+    has no occurrence today (e.g. sun never reaches the configured angle).
+
+    For a facade-relative azimuth trigger, ``cover_item_ids`` (the draft's
+    assignments) yields per-cover times plus the names of covers without a
+    facade azimuth, which the trigger would skip.
+    """
+    if (runtime := _resolve_or_error(hass, connection, msg)) is None:
+        return
+    coordinator, scheduler = runtime
+    trigger = Trigger.from_dict(msg["trigger"])
+    today = dt_util.now().date()
+    if trigger.type == "sun_azimuth" and trigger.az_relative:
+        data = coordinator.data_model
+        times: list[dict[str, Any]] = []
+        missing: list[str] = []
+        for cover_id in msg.get("cover_item_ids") or []:
+            cover = data.covers.get(cover_id)
+            if cover is None:
+                continue
+            if cover.azimuth is None:
+                missing.append(cover.name)
+                continue
+            target = (cover.azimuth + trigger.azimuth_offset_deg) % 360
+            when = scheduler.azimuth_crossing_local(float(target), today)
+            times.append(
+                {
+                    "cover_item_id": cover_id,
+                    "name": cover.name,
+                    "time": (
+                        (when + timedelta(minutes=trigger.offset_min)).isoformat()
+                        if when
+                        else None
+                    ),
+                }
+            )
+        resolved = sorted(t["time"] for t in times if t["time"])
+        connection.send_result(
+            msg["id"],
+            {
+                "time": resolved[0] if resolved else None,
+                "time_last": resolved[-1] if resolved else None,
+                "times": times,
+                "missing": missing,
+            },
+        )
+        return
+    base = scheduler.resolve_trigger_base(trigger, today)
+    connection.send_result(
+        msg["id"], {"time": base.isoformat() if base else None}
+    )
 
 
 @websocket_api.websocket_command(
