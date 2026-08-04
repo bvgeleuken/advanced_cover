@@ -17,11 +17,19 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_ACTION, EVENT_LOG_SIZE
+from .const import (
+    DOMAIN,
+    EVENT_ACTION,
+    EVENT_LOG_SIZE,
+    RUN_STATE_DONE,
+    RUN_STATE_EXPIRED,
+)
 from .models import CoverItem, EntryData
-from .store import AdvancedCoverStore
+from .store import AdvancedCoverRuntimeStore, AdvancedCoverStore
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from .scheduler import Occurrence
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,14 +47,18 @@ class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         entry: ConfigEntry,
         store: AdvancedCoverStore,
+        runtime_store: AdvancedCoverRuntimeStore | None = None,
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=None
         )
         self.store = store
+        # Snapshot of today's outcomes + log, so a restart does not wipe them.
+        self.runtime_store = runtime_store
         # Volatile per-day state, rebuilt at midnight/restart (plan: no tracking).
         self.day_plan: list[Occurrence] = []
+        self.day_plan_date: date | None = None
         self.action_log: deque[dict[str, Any]] = deque(maxlen=EVENT_LOG_SIZE)
         # Live preflight: track condition-referenced entities and push a fresh
         # snapshot (debounced) whenever one of them changes.
@@ -138,14 +150,64 @@ class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._debounce_unsub()
             self._debounce_unsub = None
 
-    def set_day_plan(self, plan: list[Occurrence]) -> None:
+    def set_day_plan(
+        self, plan: list[Occurrence], plan_date: date | None = None
+    ) -> None:
         """Replace the day plan and notify listeners."""
         self.day_plan = plan
+        if plan_date is not None:
+            self.day_plan_date = plan_date
+        self._schedule_runtime_save()
         self.async_update_listeners()
 
     def notify_plan_changed(self) -> None:
         """Notify listeners after in-place plan mutation (e.g. re-arm fired)."""
+        self._schedule_runtime_save()
         self.async_update_listeners()
+
+    # -------------------------------------------------- runtime persistence
+
+    def runtime_data_for(self, day: date) -> dict[str, Any] | None:
+        """Return the persisted snapshot for ``day``; ``None`` on date mismatch."""
+        if self.runtime_store is None:
+            return None
+        data = self.runtime_store.data
+        if data.get("date") != day.isoformat():
+            return None
+        return data
+
+    def restore_action_log(self, day: date) -> None:
+        """Re-fill the in-memory action log from the persisted snapshot."""
+        data = self.runtime_data_for(day)
+        if not data or self.action_log:
+            return
+        entries = [e for e in data.get("log") or [] if isinstance(e, dict)]
+        # Stored newest-first (list(deque)); extend keeps that order.
+        self.action_log.extend(entries[:EVENT_LOG_SIZE])
+
+    def _schedule_runtime_save(self) -> None:
+        """Debounced persist of today's outcomes + action log."""
+        if self.runtime_store is None or self.day_plan_date is None:
+            return
+        self.runtime_store.async_schedule_save(
+            {
+                "date": self.day_plan_date.isoformat(),
+                "fired": {occ.scenario_id: occ.fired for occ in self.day_plan},
+                "runs": [
+                    {
+                        "scenario_id": occ.scenario_id,
+                        "cover_item_id": run.cover_item_id,
+                        "status": run.status,
+                        "result": run.result,
+                        "reason": run.reason,
+                    }
+                    for occ in self.day_plan
+                    for run in occ.runs.values()
+                    if run.status in (RUN_STATE_DONE, RUN_STATE_EXPIRED)
+                ],
+                "log": list(self.action_log),
+            }
+        )
 
     def log_action(
         self,
@@ -170,6 +232,7 @@ class AdvancedCoverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "position": position,
         }
         self.action_log.appendleft(entry)
+        self._schedule_runtime_save()
         self.hass.bus.async_fire(
             EVENT_ACTION,
             {

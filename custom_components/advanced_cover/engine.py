@@ -16,11 +16,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .const import (
+    AZ_MODE_OFF,
+    AZ_MODE_RELATIVE,
     COND_CONTACT,
     COND_COVER_POSITION,
     COND_ENTITY_STATE,
     COND_ENTITY_STATE_NOT,
     COND_NUMERIC_STATE,
+    COND_SUN_POSITION,
     CONTACT_OPEN,
     CONTACT_TILTED,
     CONTACT_UNKNOWN,
@@ -43,6 +46,15 @@ class CoverContext:
     position: int | None = None  # current cover position 0-100, None if unknown
     contact: str = CONTACT_UNKNOWN  # resolved contact abstraction
     contact_entity_id: str | None = None  # for re-arm subscription
+    azimuth: int | None = None  # facade azimuth for relative sun conditions
+
+
+@dataclass(frozen=True)
+class SunContext:
+    """Snapshot of the sun's current position (from ``sun.sun``)."""
+
+    azimuth: float | None = None
+    elevation: float | None = None
 
 
 @dataclass
@@ -133,8 +145,65 @@ def _check_numeric_state(cond: Condition, get_state: GetState) -> str | None:
     return None
 
 
+def _az_in_window(azimuth: float, start: float, end: float) -> bool:
+    """Whether ``azimuth`` lies in the clockwise window from ``start`` to ``end``.
+
+    Wrap-aware (a window 300°→60° spans north) and free of any assumption
+    about the sun's direction of travel, so it is hemisphere-neutral.
+    """
+    span = (end - start) % 360.0
+    return (azimuth - start) % 360.0 <= span
+
+
+def _sun_window(cond: Condition, cover: CoverContext) -> tuple[float, float] | None:
+    """Resolve the condition's azimuth window to absolute compass degrees."""
+    if cond.az_from is None or cond.az_to is None:
+        return None
+    if cond.az_mode == AZ_MODE_RELATIVE:
+        if cover.azimuth is None:
+            return None
+        return (
+            (cover.azimuth + cond.az_from) % 360.0,
+            (cover.azimuth + cond.az_to) % 360.0,
+        )
+    return (cond.az_from % 360.0, cond.az_to % 360.0)
+
+
+def _check_sun_position(
+    cond: Condition, sun: SunContext, cover: CoverContext
+) -> str | None:
+    """Return failure reason or ``None`` when passed."""
+    has_elevation = cond.above is not None or cond.below is not None
+    if not has_elevation and cond.az_mode == AZ_MODE_OFF:
+        return "invalid condition: no sun constraint"
+    if has_elevation:
+        if sun.elevation is None:
+            return "sun elevation is unavailable"
+        if cond.above is not None and sun.elevation <= cond.above:
+            return f"sun elevation {sun.elevation:.1f}° is not above {cond.above:g}°"
+        if cond.below is not None and sun.elevation >= cond.below:
+            return f"sun elevation {sun.elevation:.1f}° is not below {cond.below:g}°"
+    if cond.az_mode != AZ_MODE_OFF:
+        if cond.az_from is None or cond.az_to is None:
+            return "invalid condition: missing azimuth window"
+        if cond.az_mode == AZ_MODE_RELATIVE and cover.azimuth is None:
+            return "cover has no facade direction configured"
+        if sun.azimuth is None:
+            return "sun azimuth is unavailable"
+        window = _sun_window(cond, cover)
+        if window is None:
+            return "invalid condition: missing azimuth window"
+        start, end = window
+        if not _az_in_window(sun.azimuth, start, end):
+            return f"sun azimuth {sun.azimuth:.0f}° is outside {start:.0f}°-{end:.0f}°"
+    return None
+
+
 def evaluate_condition(
-    cond: Condition, get_state: GetState, cover: CoverContext
+    cond: Condition,
+    get_state: GetState,
+    cover: CoverContext,
+    sun: SunContext | None = None,
 ) -> str | None:
     """Evaluate one condition; return failure reason or ``None`` when passed."""
     if cond.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT):
@@ -145,6 +214,8 @@ def evaluate_condition(
         return _check_contact(cond, cover)
     if cond.type == COND_NUMERIC_STATE:
         return _check_numeric_state(cond, get_state)
+    if cond.type == COND_SUN_POSITION:
+        return _check_sun_position(cond, sun or SunContext(), cover)
     return f"invalid condition: unknown type '{cond.type}'"
 
 
@@ -189,6 +260,7 @@ def evaluate_conditions(
     conditions: list[Condition],
     get_state: GetState,
     cover: CoverContext,
+    sun: SunContext | None = None,
 ) -> EvaluationResult:
     """Evaluate all conditions with AND semantics.
 
@@ -198,7 +270,7 @@ def evaluate_conditions(
     failed_reasons: list[str] = []
     rearm: set[str] = set()
     for cond in _merge_entity_state_conditions(conditions):
-        reason = evaluate_condition(cond, get_state, cover)
+        reason = evaluate_condition(cond, get_state, cover, sun)
         if reason is None:
             continue
         failed_reasons.append(reason)
@@ -232,7 +304,9 @@ _SUM_ENTITY_STATE_NOT = "config_panel.cond_sum_entity_state_not"
 _SUM_COVER_POSITION = "config_panel.cond_sum_cover_position"
 _SUM_CONTACT = "config_panel.cond_sum_contact"
 _SUM_NUMERIC = "config_panel.cond_sum_numeric"
+_SUM_SUN_POSITION = "config_panel.cond_sum_sun_position"
 _SUM_SAFETY = "config_panel.cond_sum_safety"
+_SUM_SAFETY_CLAMP = "config_panel.cond_sum_safety_clamp"
 _SUM_UNAVAILABLE = "config_panel.cond_sum_unavailable"
 _SUM_AUTOMATION_DISABLED = "config_panel.cond_sum_automation_disabled"
 _SUM_INVALID = "config_panel.cond_sum_invalid"
@@ -264,7 +338,7 @@ class ConditionEval:
 
 
 def _condition_actual(
-    cond: Condition, get_state: GetState, cover: CoverContext
+    cond: Condition, get_state: GetState, cover: CoverContext, sun: SunContext
 ) -> str | None:
     """Raw current value of the entity/quantity a condition looks at."""
     if cond.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT, COND_NUMERIC_STATE):
@@ -273,11 +347,15 @@ def _condition_actual(
         return None if cover.position is None else str(cover.position)
     if cond.type == COND_CONTACT:
         return cover.contact
+    if cond.type == COND_SUN_POSITION:
+        if sun.azimuth is None or sun.elevation is None:
+            return None
+        return f"{sun.azimuth:.0f}° / {sun.elevation:.1f}°"
     return None
 
 
 def _condition_unavailable(
-    cond: Condition, get_state: GetState, cover: CoverContext
+    cond: Condition, get_state: GetState, cover: CoverContext, sun: SunContext
 ) -> bool:
     """Return True when a condition cannot be evaluated (missing value)."""
     if cond.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT, COND_NUMERIC_STATE):
@@ -288,6 +366,8 @@ def _condition_unavailable(
         return cover.position is None
     if cond.type == COND_CONTACT:
         return cover.contact_entity_id is None or cover.contact == CONTACT_UNKNOWN
+    if cond.type == COND_SUN_POSITION:
+        return sun.azimuth is None or sun.elevation is None
     return False
 
 
@@ -308,10 +388,37 @@ def _op_and_value(cond: Condition) -> tuple[str, str]:
     return "?", "?"
 
 
+def _sun_elev_requirement(cond: Condition) -> str:
+    """Short, language-neutral elevation requirement ("> 15°", "15°-30°")."""
+    if cond.above is not None and cond.below is not None:
+        return f"{cond.above:g}°-{cond.below:g}°"
+    if cond.above is not None:
+        return f"> {cond.above:g}°"
+    if cond.below is not None:
+        return f"< {cond.below:g}°"
+    return "—"
+
+
+def _sun_az_requirement(cond: Condition, cover: CoverContext) -> str:
+    """Short azimuth-window requirement in absolute compass degrees."""
+    if cond.az_mode == AZ_MODE_OFF:
+        return "—"
+    window = _sun_window(cond, cover)
+    if window is None:
+        return "?"
+    return f"{window[0]:.0f}°-{window[1]:.0f}°"
+
+
 def _summary_for(
-    cond: Condition, actual: str | None, *, unavailable: bool
+    cond: Condition,
+    actual: str | None,
+    cover: CoverContext,
+    *,
+    unavailable: bool,
 ) -> tuple[str, dict[str, Any]]:
     """Build (summary_key, values) for a condition's checklist line."""
+    if unavailable and cond.type == COND_SUN_POSITION:
+        return _SUM_UNAVAILABLE, {"entity": "sun.sun"}
     if unavailable:
         return _SUM_UNAVAILABLE, {"entity": cond.entity_id or "?"}
     if cond.type == COND_ENTITY_STATE:
@@ -345,11 +452,21 @@ def _summary_for(
             "op": op,
             "value": value,
         }
+    if cond.type == COND_SUN_POSITION:
+        return _SUM_SUN_POSITION, {
+            "actual": actual or "?",
+            "elev_req": _sun_elev_requirement(cond),
+            "az_req": _sun_az_requirement(cond, cover),
+        }
     return _SUM_INVALID, {}
 
 
 def evaluate_condition_eval(
-    cond: Condition, get_state: GetState, cover: CoverContext, scope: str
+    cond: Condition,
+    get_state: GetState,
+    cover: CoverContext,
+    scope: str,
+    sun: SunContext | None = None,
 ) -> ConditionEval:
     """Evaluate one condition into a render-ready :class:`ConditionEval`.
 
@@ -358,8 +475,9 @@ def evaluate_condition_eval(
     reported as ``ok is None`` when the value is simply unavailable, else
     ``ok is False``.
     """
-    reason = evaluate_condition(cond, get_state, cover)
-    unavailable = _condition_unavailable(cond, get_state, cover)
+    sun_ctx = sun or SunContext()
+    reason = evaluate_condition(cond, get_state, cover, sun_ctx)
+    unavailable = _condition_unavailable(cond, get_state, cover, sun_ctx)
     ok: bool | None
     if reason is None:
         ok = True
@@ -367,8 +485,10 @@ def evaluate_condition_eval(
         ok = None
     else:
         ok = False
-    actual = _condition_actual(cond, get_state, cover)
-    summary_key, summary_values = _summary_for(cond, actual, unavailable=ok is None)
+    actual = _condition_actual(cond, get_state, cover, sun_ctx)
+    summary_key, summary_values = _summary_for(
+        cond, actual, cover, unavailable=ok is None
+    )
     entity_id = cover.contact_entity_id if cond.type == COND_CONTACT else cond.entity_id
     return ConditionEval(
         scope=scope,
@@ -386,10 +506,11 @@ def evaluate_conditions_detailed(
     get_state: GetState,
     cover: CoverContext,
     scope: str,
+    sun: SunContext | None = None,
 ) -> list[ConditionEval]:
     """Render-ready evaluation of a condition list (same merge as the engine)."""
     return [
-        evaluate_condition_eval(cond, get_state, cover, scope)
+        evaluate_condition_eval(cond, get_state, cover, scope, sun)
         for cond in _merge_entity_state_conditions(conditions)
     ]
 
@@ -463,5 +584,22 @@ def safety_condition_eval(*, blocked: bool, ventilation_position: int) -> Condit
         ok=not blocked,
         actual=None,
         summary_key=_SUM_SAFETY,
+        summary_values={"ventilation": ventilation_position},
+    )
+
+
+def safety_clamp_eval(*, ventilation_position: int) -> ConditionEval:
+    """Info line: the safety rule will clamp this move to the ventilation gap.
+
+    ``ok=True`` on purpose — a clamped move still runs, it just stops at the
+    ventilation position instead of the scenario target.
+    """
+    return ConditionEval(
+        scope=SCOPE_SAFETY,
+        type="safety_clamp",
+        entity_id=None,
+        ok=True,
+        actual=None,
+        summary_key=_SUM_SAFETY_CLAMP,
         summary_values={"ventilation": ventilation_position},
     )

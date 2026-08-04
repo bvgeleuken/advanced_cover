@@ -27,6 +27,12 @@ export function formatReason(
     return t(hass, "config_panel.cond_sum_safety", { ventilation: m[2] });
   m = reason.match(/^(?:service|script) call failed: ([\s\S]*)$/);
   if (m) return t(hass, "config_panel.reason_service_failed", { error: m[1] });
+  if (reason === "waiting for the sun to reach the facade direction")
+    return t(hass, "config_panel.reason_waiting_facade");
+  if (reason === "no facade direction configured")
+    return t(hass, "config_panel.reason_no_facade");
+  if (reason === "sun does not reach this facade today")
+    return t(hass, "config_panel.reason_sun_not_reaching");
   if (reason === "master switch is off")
     return t(hass, "config_panel.reason_master_off");
   if (reason === "cover automation is off")
@@ -36,4 +42,38 @@ export function formatReason(
   // Condition reasons from the engine ("sensor.x is 'on', expected …") are
   // already descriptive; possibly a "; "-joined list.
   return reason;
+}
+
+export type ReasonSeverity = "noise" | "info" | "error";
+
+/** Classify a backend reason for display prominence.
+
+    "noise" = expected everyday outcomes (trigger already passed, cover was
+    already in position) that the status badge fully covers — hidden from
+    the reason lines. "error" = something is actually wrong and deserves
+    color. Everything else is "info": useful context, rendered muted. */
+export function reasonSeverity(
+  reason: string | null | undefined
+): ReasonSeverity {
+  if (!reason) return "info";
+  // The safety reason itself contains "; " — match it before splitting.
+  if (/^contact is \w+; closing below \d+% is blocked$/.test(reason)) {
+    return "error";
+  }
+  let severity: ReasonSeverity = "noise";
+  for (const part of reason.split("; ")) {
+    if (
+      / is unavailable$/.test(part) ||
+      /^(?:service|script) call failed:/.test(part)
+    ) {
+      return "error";
+    }
+    if (
+      part !== "trigger time already passed" &&
+      !/^already at \d+% \(min delta \d+%\)$/.test(part)
+    ) {
+      severity = "info";
+    }
+  }
+  return severity;
 }

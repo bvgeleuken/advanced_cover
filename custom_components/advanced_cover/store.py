@@ -63,3 +63,43 @@ class AdvancedCoverStore:
     async def async_remove(self) -> None:
         """Delete the store file (entry removed)."""
         await self._store.async_remove()
+
+
+# Debounce for runtime snapshots: collapse a burst of run outcomes (a scenario
+# firing over 15 covers) into one disk write. Home Assistant's Store flushes
+# any pending delayed save on shutdown, so nothing is lost on a clean stop.
+RUNTIME_SAVE_DELAY_S = 2.0
+
+
+class AdvancedCoverRuntimeStore:
+    """Persist today's volatile outcomes (run results + action log).
+
+    Restart carryover: without this file a Home Assistant restart wipes the
+    day's history — every scenario that had already fired would re-appear as
+    "expired / trigger time already passed" and armed retry windows would be
+    forgotten. The payload is small and only meaningful for the current day;
+    a date mismatch on load simply discards it.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
+        """Initialize runtime store for a config entry."""
+        self._store: Store[dict[str, Any]] = Store(
+            hass,
+            STORE_VERSION,
+            f"{DOMAIN}.{entry_id}.runtime",
+        )
+        self.data: dict[str, Any] = {}
+
+    async def async_load(self) -> dict[str, Any]:
+        """Load the last runtime snapshot (may belong to a previous day)."""
+        self.data = await self._store.async_load() or {}
+        return self.data
+
+    def async_schedule_save(self, payload: dict[str, Any]) -> None:
+        """Debounced save of a fresh runtime snapshot."""
+        self.data = payload
+        self._store.async_delay_save(lambda: payload, RUNTIME_SAVE_DELAY_S)
+
+    async def async_remove(self) -> None:
+        """Delete the runtime store file (entry removed)."""
+        await self._store.async_remove()

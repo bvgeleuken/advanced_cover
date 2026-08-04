@@ -6,6 +6,9 @@ export interface TimelineEvent {
   colorClass: string; // executed | will_run | would_skip | skipped | armed | ...
   label: string; // "08:24 · Morgens alles auf"
   timeLabel: string; // "08:24"
+  // Retry window: end minute of the re-arm span drawn behind the marker
+  // (e.g. planned time + retry window). Omitted/null = no span.
+  spanEndMinute?: number | null;
   onClick: () => void;
 }
 
@@ -71,6 +74,18 @@ export function renderTimeline(opts: TimelineOptions): TemplateResult {
         <div class="tl-now" style="left:${(opts.nowMin / 1440) * 100}%">
           <span class="tl-now-dot"></span>
         </div>
+        ${opts.events.map((ev) => {
+          if (ev.spanEndMinute == null || ev.spanEndMinute <= ev.minute) {
+            return nothing;
+          }
+          const left = (ev.minute / 1440) * 100;
+          const width =
+            ((Math.min(ev.spanEndMinute, 1440) - ev.minute) / 1440) * 100;
+          return html`<span
+            class="tl-span"
+            style="left:${left}%;width:${width}%"
+          ></span>`;
+        })}
         ${opts.events.map((ev) => {
           const left = (ev.minute / 1440) * 100;
           const row = rows.get(ev.id) ?? 0;
@@ -226,6 +241,23 @@ export const timelineStyles = css`
   .tl-marker.blocked_safety .tl-dot,
   .tl-marker.unavailable .tl-dot {
     background: var(--error-color, #d93025);
+  }
+  /* Partially fine: executed covers next to blocked/unavailable ones. */
+  .tl-marker.executed_partial .tl-dot {
+    background: var(--success-color, #43a047);
+    border-color: var(--error-color, #d93025);
+  }
+  /* Retry window: the span in which a missed occurrence still re-tries. */
+  .tl-span {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--warning-color, #f0b23a) 16%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--warning-color, #f0b23a) 45%, transparent);
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 1;
   }
   .tl-axis {
     position: relative;

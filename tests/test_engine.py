@@ -255,3 +255,117 @@ def test_preflight_verdict_matches_trigger_path():
     evals = evaluate_conditions_detailed(conds, get, CTX, "scenario")
     trigger = evaluate_conditions(conds, get, CTX)
     assert (rollup_preflight(evals, "NOW")["verdict"] == "would_run") == trigger.passed
+
+
+# ---------------------------------------------------------------- sun_position
+
+
+def _sun_cond(**kwargs):
+    from custom_components.advanced_cover.models import Condition
+
+    return Condition(type="sun_position", **kwargs)
+
+
+def test_sun_elevation_above_and_below():
+    from custom_components.advanced_cover.engine import SunContext
+
+    get = states({})
+    sun = SunContext(azimuth=200.0, elevation=25.0)
+    assert evaluate_condition(_sun_cond(above=15), get, CTX, sun) is None
+    assert evaluate_condition(_sun_cond(above=30), get, CTX, sun) is not None
+    assert evaluate_condition(_sun_cond(below=30), get, CTX, sun) is None
+    assert evaluate_condition(_sun_cond(below=20), get, CTX, sun) is not None
+
+
+def test_sun_azimuth_absolute_window_wraps_north():
+    from custom_components.advanced_cover.engine import SunContext
+
+    get = states({})
+    cond = _sun_cond(az_mode="absolute", az_from=300, az_to=60)
+    on = SunContext(azimuth=5, elevation=10)
+    assert evaluate_condition(cond, get, CTX, on) is None
+    assert (
+        evaluate_condition(cond, get, CTX, SunContext(azimuth=180, elevation=10))
+        is not None
+    )
+
+
+def test_sun_azimuth_relative_uses_cover_facade():
+    from custom_components.advanced_cover.engine import CoverContext, SunContext
+
+    get = states({})
+    south = CoverContext(azimuth=180)
+    # Window from -45° to +60° around a south facade: 135°..240°.
+    cond = _sun_cond(az_mode="relative", az_from=-45, az_to=60)
+    sun_on = SunContext(azimuth=200, elevation=30)
+    sun_off = SunContext(azimuth=120, elevation=30)
+    assert evaluate_condition(cond, get, south, sun_on) is None
+    assert evaluate_condition(cond, get, south, sun_off) is not None
+    # Same condition on a cover without a facade azimuth fails safely.
+    reason = evaluate_condition(cond, get, CoverContext(), sun_on)
+    assert reason is not None and "facade" in reason
+
+
+def test_sun_relative_window_is_hemisphere_neutral():
+    """A pure angular window: the same relative condition matches a sun at
+    200° on a south facade and a sun at 20° on a north facade (Sydney)."""
+    from custom_components.advanced_cover.engine import CoverContext, SunContext
+
+    get = states({})
+    cond = _sun_cond(az_mode="relative", az_from=-45, az_to=60)
+    assert (
+        evaluate_condition(
+            cond, get, CoverContext(azimuth=180), SunContext(azimuth=200, elevation=30)
+        )
+        is None
+    )
+    assert (
+        evaluate_condition(
+            cond, get, CoverContext(azimuth=0), SunContext(azimuth=20, elevation=30)
+        )
+        is None
+    )
+
+
+def test_sun_unavailable_fails_safe_and_rearms_on_sun_entity():
+    from custom_components.advanced_cover.engine import SunContext
+
+    get = states({})
+    cond = _sun_cond(above=10)
+    assert evaluate_condition(cond, get, CTX, None) is not None
+    assert evaluate_condition(cond, get, CTX, SunContext()) is not None
+    result = evaluate_conditions([cond], get, CTX, SunContext())
+    assert not result.passed
+    assert result.rearm_entity_ids == {"sun.sun"}
+
+
+def test_sun_condition_without_constraints_is_invalid():
+    from custom_components.advanced_cover.engine import SunContext
+
+    reason = evaluate_condition(
+        _sun_cond(), states({}), CTX, SunContext(azimuth=100, elevation=10)
+    )
+    assert reason is not None and "invalid" in reason
+
+
+def test_sun_preflight_unknown_when_sun_missing():
+    evals = evaluate_conditions_detailed(
+        [_sun_cond(above=10)], states({}), CTX, "scenario"
+    )
+    assert evals[0].ok is None  # unavailable, not a hard fail
+
+
+def test_sun_preflight_combined_elevation_and_azimuth():
+    from custom_components.advanced_cover.engine import CoverContext, SunContext
+
+    cond = _sun_cond(above=15, az_mode="relative", az_from=-45, az_to=60)
+    evals = evaluate_conditions_detailed(
+        [cond],
+        states({}),
+        CoverContext(azimuth=180),
+        "assignment",
+        SunContext(azimuth=200, elevation=30),
+    )
+    assert evals[0].ok is True
+    assert evals[0].summary_values["az_req"] == "135°-240°"
+    assert evals[0].summary_values["elev_req"] == "> 15°"

@@ -4,6 +4,7 @@ import type {
   HomeAssistant,
   PanelSnapshot,
   Scenario,
+  TriggerPreview,
 } from "../types";
 
 const D = "advanced_cover";
@@ -24,6 +25,20 @@ export const subscribeState = (
   hass.connection?.subscribeMessage(onState, {
     type: `${D}/subscribe`,
     entry_id: entryId,
+  });
+
+/** Resolve a (draft) trigger to today's base time via the scheduler's solver. */
+export const previewTrigger = (
+  hass: HomeAssistant,
+  entryId: string,
+  trigger: Record<string, unknown>,
+  coverItemIds?: string[]
+): Promise<TriggerPreview> =>
+  hass.callWS({
+    type: `${D}/trigger/preview`,
+    entry_id: entryId,
+    trigger,
+    ...(coverItemIds?.length ? { cover_item_ids: coverItemIds } : {}),
   });
 
 export const saveConfig = (

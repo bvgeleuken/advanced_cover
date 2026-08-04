@@ -90,7 +90,7 @@ class CoverExecutor:
         self._default_delta = delta
 
     def _apply_safety(
-        self, cover: CoverItem, target_position: int
+        self, cover: CoverItem, action: CoverAction
     ) -> tuple[int | None, str | None]:
         """Apply the safety rule; return (adjusted position, block reason).
 
@@ -98,8 +98,11 @@ class CoverExecutor:
         *closing* moves below the ventilation position are blocked or
         clamped. Opening moves are never restricted. The rule only applies
         when a contact sensor is configured — for awnings and covers
-        without a contact it is inert by construction.
+        without a contact it is inert by construction. The action's
+        ``safety_override`` (scenario/assignment level) takes precedence
+        over the cover's configured safety mode.
         """
+        target_position = action.position
         if not cover.contact_entity_id:
             return target_position, None
         raw = self.hass.states.get(cover.contact_entity_id)
@@ -117,7 +120,8 @@ class CoverExecutor:
         if current is not None and target_position >= current:
             # Not a closing move (fail-safe: unknown position counts as closing).
             return target_position, None
-        if cover.safety.mode == SAFETY_MODE_CLAMP:
+        mode = action.safety_override or cover.safety.mode
+        if mode == SAFETY_MODE_CLAMP:
             _LOGGER.debug(
                 "Safety rule clamps %s to ventilation position %s%%",
                 cover.name,
@@ -137,7 +141,7 @@ class CoverExecutor:
             cover.low_mode_entity_id or cover.low_mode_script_id
         )
 
-        target_position, block_reason = self._apply_safety(cover, action.position)
+        target_position, block_reason = self._apply_safety(cover, action)
         if block_reason is not None or target_position is None:
             return ExecutionOutcome(
                 RESULT_BLOCKED_SAFETY, block_reason, action.position

@@ -15,7 +15,7 @@ import {
   preflightReason,
   renderCondChecklist,
 } from "../preflight";
-import { formatReason } from "../reasons";
+import { formatReason, reasonSeverity } from "../reasons";
 import { sharedStyles } from "../styles";
 import { renderTimeline, timelineStyles, type TimelineEvent } from "../timeline";
 import type {
@@ -40,12 +40,48 @@ function occKind(occ: Occurrence): string {
   return "skipped";
 }
 
-/** Most common reason among a fired block's non-executed runs, localized. */
+/** Per-result counts of a fired block's runs, in display order.
+
+    Unknown result strings are appended verbatim so no outcome is ever
+    silently dropped from the badge row. */
+const COUNT_ORDER = [
+  "executed",
+  "armed",
+  "skipped",
+  "expired",
+  "unavailable",
+  "blocked_safety",
+];
+function occStatusCounts(occ: Occurrence): Array<[string, number]> {
+  const counts = new Map<string, number>();
+  for (const r of occ.assignments) {
+    const kind = r.status === "armed" ? "armed" : (r.result ?? "skipped");
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  const ordered: Array<[string, number]> = COUNT_ORDER.filter((k) =>
+    counts.has(k)
+  ).map((k) => [k, counts.get(k)!]);
+  for (const [k, n] of counts) {
+    if (!COUNT_ORDER.includes(k)) ordered.push([k, n]);
+  }
+  return ordered;
+}
+
+/** Most common reason among a fired block's non-executed runs, localized.
+
+    Everyday outcomes ("trigger already passed", "already in position") are
+    left out entirely — the status badge says it all; a wall of orange text
+    on every block would drown out the reasons that matter. Shown collapsed
+    only when the whole block failed: as soon as one cover executed, the
+    problem is per-cover, the count badges tell the story and the details
+    live in the expanded view. */
 function occReasonSummary(hass: HomeAssistant, occ: Occurrence): string | null {
   if (!occ.fired) return null;
+  if (occ.assignments.some((r) => r.result === "executed")) return null;
   const counts = new Map<string, number>();
   for (const r of occ.assignments) {
     if (r.result === "executed" || !r.reason) continue;
+    if (reasonSeverity(r.reason) === "noise") continue;
     counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1);
   }
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -55,9 +91,20 @@ function occReasonSummary(hass: HomeAssistant, occ: Occurrence): string | null {
   return top[1] > 1 ? `${text} (${top[1]}×)` : text;
 }
 
-/** Map a block kind to a timeline marker color class. */
-function timelineClass(kind: string): string {
+/** Map a block to a timeline marker color class.
+
+    A fired block with executed covers *and* real problems (blocked /
+    unavailable) renders as a green dot with a red ring: mostly fine, but
+    something needs attention. */
+function timelineClass(occ: Occurrence): string {
+  const kind = occKind(occ);
   if (kind === "would_run") return "will_run";
+  if (occ.fired && occ.assignments.some((r) => r.result === "executed")) {
+    const problems = occ.assignments.some((r) =>
+      ["blocked_safety", "unavailable"].includes(r.result ?? "")
+    );
+    if (problems) return "executed_partial";
+  }
   return kind;
 }
 
@@ -261,6 +308,22 @@ export class ViewToday extends LitElement {
       .legend .dot.skipped {
         background: var(--disabled-text-color, #6d7476);
       }
+      .legend .dot.executed_partial {
+        width: 11px;
+        height: 11px;
+        background: var(--success-color, #43a047);
+        border: 2px solid var(--error-color, #d93025);
+        box-sizing: border-box;
+      }
+      .legend .swatch-retry {
+        width: 16px;
+        height: 9px;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--warning-color, #f0b23a) 16%, transparent);
+        border: 1px dashed
+          color-mix(in srgb, var(--warning-color, #f0b23a) 55%, transparent);
+        box-sizing: border-box;
+      }
       /* Plan blocks. */
       .plan-toolbar {
         display: flex;
@@ -343,7 +406,7 @@ export class ViewToday extends LitElement {
       }
       .block-reason {
         font-size: 0.8rem;
-        color: var(--warning-color, #f0b23a);
+        color: var(--secondary-text-color);
       }
       .block-edit,
       .block-chevron-btn {
@@ -440,6 +503,12 @@ export class ViewToday extends LitElement {
       }
       .block-reason.error {
         color: var(--error-color, #d93025);
+      }
+      .cover-line .cover-fire-at {
+        font-size: 0.78rem;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
       }
       .cover-line .cover-target {
         margin-left: auto;
@@ -665,12 +734,24 @@ export class ViewToday extends LitElement {
       .map((occ) => {
         const m = minutesOfDay(occ.planned_at);
         if (m == null) return null;
+        // Retry window: visualize when a not-yet-decided occurrence would
+        // still re-try (upcoming blocks and blocks with armed runs).
+        let spanEndMinute: number | null = null;
+        if (
+          occ.retry_until &&
+          (!occ.fired || occ.assignments.some((r) => r.status === "armed"))
+        ) {
+          const end = minutesOfDay(occ.retry_until);
+          // A window past midnight clamps to the end of today's strip.
+          spanEndMinute = end == null || end <= m ? 1440 : end;
+        }
         return {
           id: ViewToday._occKey(occ),
           minute: m,
-          colorClass: timelineClass(occKind(occ)),
+          colorClass: timelineClass(occ),
           label: `${formatTime(occ.planned_at)} · ${occ.scenario_name}`,
           timeLabel: formatTime(occ.planned_at),
+          spanEndMinute,
           onClick: () => this._scrollToBlock(occ),
         } as TimelineEvent;
       })
@@ -696,6 +777,8 @@ export class ViewToday extends LitElement {
             <span><span class="dot will_run"></span>${t(this.hass, "config_panel.today_legend_will_run")}</span>
             <span><span class="dot would_skip"></span>${t(this.hass, "config_panel.today_legend_would_skip")}</span>
             <span><span class="dot skipped"></span>${t(this.hass, "config_panel.today_legend_skipped")}</span>
+            <span><span class="dot executed_partial"></span>${t(this.hass, "config_panel.today_legend_partial")}</span>
+            <span><span class="swatch-retry"></span>${t(this.hass, "config_panel.today_legend_retry")}</span>
           </span>
         </div>
         <div class="card-content">
@@ -796,12 +879,16 @@ export class ViewToday extends LitElement {
       (c) => c.scope === "safety" && c.ok === false
     );
     const cover = this.snapshot.covers.find((c) => c.id === run.cover_item_id);
-    // After firing, every non-executed run explains itself inline.
+    // After firing, a non-executed run explains itself inline — except for
+    // everyday outcomes (trigger passed, already in position), where the
+    // status badge alone is enough and a repeated hint per cover is noise.
+    const severity = reasonSeverity(run.reason);
     const reason =
-      occ.fired && run.result !== "executed"
+      occ.fired && run.result !== "executed" && severity !== "noise"
         ? formatReason(this.hass, run.reason)
         : null;
-    const severe = ["unavailable", "blocked_safety"].includes(kind);
+    const severe =
+      ["unavailable", "blocked_safety"].includes(kind) || severity === "error";
     return html`
       <div class="cover-line">
         <span class="cover-dot ${kind}"></span>
@@ -810,6 +897,9 @@ export class ViewToday extends LitElement {
           ? html`<span class="badge badge-${kind} cover-badge"
               >${t(this.hass, `config_panel.status_${kind}`)}</span
             >`
+          : nothing}
+        ${run.status === "armed" && run.fire_at
+          ? html`<span class="cover-fire-at">≈ ${formatTime(run.fire_at)}</span>`
           : nothing}
         <span class="cover-target">${run.target_position}%</span>
       </div>
@@ -924,10 +1014,19 @@ export class ViewToday extends LitElement {
   }
 
   private _renderResultBadge(occ: Occurrence) {
-    const kind = occKind(occ);
-    return html`<span class="badge badge-${kind}"
-      >${t(this.hass, `config_panel.status_${kind}`)}</span
-    >`;
+    const counts = occStatusCounts(occ);
+    if (counts.length <= 1) {
+      const kind = occKind(occ);
+      return html`<span class="badge badge-${kind}"
+        >${t(this.hass, `config_panel.status_${kind}`)}</span
+      >`;
+    }
+    // Mixed outcomes: one count badge per result ("13× Executed · 1× Blocked").
+    return counts.map(
+      ([kind, n]) => html`<span class="badge badge-${kind}"
+        >${n}× ${t(this.hass, `config_panel.status_${kind}`)}</span
+      >`
+    );
   }
 
   private _renderPlanCard() {

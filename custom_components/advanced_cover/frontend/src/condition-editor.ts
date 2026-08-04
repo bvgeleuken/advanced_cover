@@ -12,6 +12,12 @@ export interface ConditionEditorOptions {
   entityListId: string;
   /** Whether the contact condition type is offered (cover has a contact). */
   contactAvailable: boolean;
+  /**
+   * Facade azimuth of the cover these conditions belong to, for the
+   * relative sun window: a number shows the reference, ``null`` warns that
+   * the cover has none, ``undefined`` (scenario scope) shows a generic hint.
+   */
+  coverAzimuth?: number | null;
 }
 
 function emptyCondition(type: ConditionType): Condition {
@@ -22,6 +28,15 @@ function emptyCondition(type: ConditionType): Condition {
       return { type, accepted: ["closed"] };
     case "numeric_state":
       return { type, entity_id: "", above: null, below: null };
+    case "sun_position":
+      return {
+        type,
+        above: 20,
+        below: null,
+        az_mode: "relative",
+        az_from: -45,
+        az_to: 45,
+      };
     default:
       return { type, entity_id: "", states: [] };
   }
@@ -246,6 +261,82 @@ function renderCondition(
         />
       `;
       break;
+    case "sun_position": {
+      const numInput = (
+        value: number | null | undefined,
+        patchKey: "above" | "below" | "az_from" | "az_to",
+        min: number,
+        max: number
+      ) => html`
+        <input
+          type="number"
+          min=${min}
+          max=${max}
+          style="width:80px"
+          .value=${value == null ? "" : String(value)}
+          @input=${(e: Event) => {
+            const raw = (e.target as HTMLInputElement).value;
+            update(opts, index, { [patchKey]: raw === "" ? null : Number(raw) });
+          }}
+        />
+      `;
+      const azMode = cond.az_mode ?? "off";
+      const relHint =
+        azMode !== "relative"
+          ? nothing
+          : opts.coverAzimuth === undefined
+            ? html`<span class="muted">${t(hass, "config_panel.cond_sun_rel_generic")}</span>`
+            : opts.coverAzimuth === null
+              ? html`<span class="muted warn">${t(hass, "config_panel.cond_sun_rel_missing")}</span>`
+              : html`<span class="muted">
+                  ${t(hass, "config_panel.cond_sun_rel_hint", {
+                    az: opts.coverAzimuth,
+                  })}
+                </span>`;
+      body = html`
+        <span>${t(hass, "config_panel.cond_sun_prefix")}</span>
+        <span>${t(hass, "config_panel.cond_sun_above")}</span>
+        ${numInput(cond.above, "above", -90, 90)}
+        <span>${t(hass, "config_panel.cond_sun_below")}</span>
+        ${numInput(cond.below, "below", -90, 90)}
+        <span>${t(hass, "config_panel.cond_sun_deg_suffix")}</span>
+        <select
+          .value=${azMode}
+          @change=${(e: Event) =>
+            update(opts, index, {
+              az_mode: (e.target as HTMLSelectElement)
+                .value as Condition["az_mode"],
+            })}
+        >
+          ${(["off", "absolute", "relative"] as const).map(
+            (m) => html`<option value=${m} ?selected=${azMode === m}>
+              ${t(hass, `config_panel.cond_sun_az_mode_${m}`)}
+            </option>`
+          )}
+        </select>
+        ${azMode === "off"
+          ? nothing
+          : html`
+              <span>${t(hass, "config_panel.cond_sun_from")}</span>
+              ${numInput(
+                cond.az_from,
+                "az_from",
+                azMode === "relative" ? -180 : 0,
+                azMode === "relative" ? 180 : 359
+              )}
+              <span>${t(hass, "config_panel.cond_sun_to")}</span>
+              ${numInput(
+                cond.az_to,
+                "az_to",
+                azMode === "relative" ? -180 : 0,
+                azMode === "relative" ? 180 : 359
+              )}
+              <span>°</span>
+              ${relHint}
+            `}
+      `;
+      break;
+    }
     default:
       body = html`<span class="muted">?</span>`;
   }
@@ -274,6 +365,7 @@ export function renderConditionEditor(
     "entity_state_not",
     "cover_position",
     "numeric_state",
+    "sun_position",
     ...(opts.contactAvailable ? (["contact"] as ConditionType[]) : []),
   ];
   return html`

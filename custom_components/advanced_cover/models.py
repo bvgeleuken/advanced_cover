@@ -13,11 +13,14 @@ from typing import Any
 
 from .const import (
     ACTION_MODES,
+    AZ_MODE_OFF,
+    AZ_MODES,
     COND_CONTACT,
     COND_COVER_POSITION,
     COND_ENTITY_STATE,
     COND_ENTITY_STATE_NOT,
     COND_NUMERIC_STATE,
+    COND_SUN_POSITION,
     CONDITION_TYPES,
     CONTACT_STATES,
     DEFAULT_MIN_POSITION_DELTA,
@@ -34,9 +37,14 @@ from .const import (
     RANDOM_DIRECTIONS,
     SAFETY_MODE_BLOCK,
     SAFETY_MODES,
+    SUN_DIR_FALLING,
+    SUN_DIRECTIONS,
+    SUN_ENTITY_ID,
     SUN_EVENT_SUNSET,
     SUN_EVENTS,
     TRIGGER_FIXED_TIME,
+    TRIGGER_SUN_AZIMUTH,
+    TRIGGER_SUN_ELEVATION,
     TRIGGER_SUN_EVENT,
     TRIGGER_TYPES,
     WEEKDAYS,
@@ -83,6 +91,11 @@ def _enum(value: Any, allowed: tuple[str, ...], default: str) -> str:
     return value if value in allowed else default
 
 
+def _enum_opt(value: Any, allowed: tuple[str, ...]) -> str | None:
+    """Return ``value`` if it is an allowed enum member, else ``None``."""
+    return value if value in allowed else None
+
+
 def _str_or_none(value: Any) -> str | None:
     """Return a stripped non-empty string or ``None``."""
     if value is None:
@@ -103,6 +116,13 @@ class Condition:
     - ``contact``: ``accepted`` (subset of closed/tilted/open); uses the
       cover's contact state map.
     - ``numeric_state``: ``entity_id`` + ``above`` and/or ``below``.
+    - ``sun_position``: ``above``/``below`` = sun elevation bounds in degrees;
+      ``az_mode`` + ``az_from``/``az_to`` = optional azimuth window. In
+      ``absolute`` mode the window runs clockwise from ``az_from`` to
+      ``az_to`` (compass degrees); in ``relative`` mode ``az_from``/``az_to``
+      are signed offsets around the assigned cover's facade azimuth. A pure
+      angular window makes no assumption about the sun's direction of travel,
+      so it works on both hemispheres and in the tropics.
     """
 
     type: str
@@ -114,6 +134,9 @@ class Condition:
     accepted: list[str] = field(default_factory=list)
     above: float | None = None
     below: float | None = None
+    az_mode: str = AZ_MODE_OFF
+    az_from: float | None = None
+    az_to: float | None = None
 
     def external_entity_ids(self) -> list[str]:
         """Entity ids whose changes may re-arm this condition.
@@ -123,6 +146,8 @@ class Condition:
         """
         if self.type in (COND_ENTITY_STATE, COND_ENTITY_STATE_NOT, COND_NUMERIC_STATE):
             return [self.entity_id] if self.entity_id else []
+        if self.type == COND_SUN_POSITION:
+            return [SUN_ENTITY_ID]
         return []
 
     def to_dict(self) -> dict[str, Any]:
@@ -141,6 +166,12 @@ class Condition:
             data["entity_id"] = self.entity_id
             data["above"] = self.above
             data["below"] = self.below
+        elif self.type == COND_SUN_POSITION:
+            data["above"] = self.above
+            data["below"] = self.below
+            data["az_mode"] = self.az_mode
+            data["az_from"] = self.az_from
+            data["az_to"] = self.az_to
         return data
 
     @staticmethod
@@ -160,24 +191,64 @@ class Condition:
             accepted=accepted,
             above=_opt_float(data.get("above")),
             below=_opt_float(data.get("below")),
+            az_mode=_enum(data.get("az_mode"), AZ_MODES, AZ_MODE_OFF),
+            az_from=_opt_float(data.get("az_from")),
+            az_to=_opt_float(data.get("az_to")),
         )
 
 
 @dataclass
 class Trigger:
-    """Scenario trigger: a fixed local time or a sun event with offset."""
+    """Scenario trigger: fixed local time, sun event, or sun position.
+
+    ``sun_azimuth`` fires when the sun crosses ``azimuth_deg`` (compass
+    degrees); ``sun_elevation`` fires when the sun's elevation crosses
+    ``elevation_deg`` while ``elevation_dir`` (rising/falling). Both resolve
+    to a concrete local time per day, so they share the whole occurrence
+    machinery (random window, retry, carryover) with the other trigger types.
+
+    With ``az_relative`` the azimuth trigger targets each assigned cover's
+    own facade azimuth plus ``azimuth_offset_deg`` instead of one absolute
+    direction: the occurrence starts at the earliest cover's crossing and
+    the remaining covers fire at their own times (per-run ``fire_at``).
+    """
 
     type: str = TRIGGER_FIXED_TIME
     time_local: str = "07:00"
     sun_event: str = SUN_EVENT_SUNSET
     offset_min: int = 0
+    azimuth_deg: int = 180
+    az_relative: bool = False
+    azimuth_offset_deg: int = 0
+    elevation_deg: float = 0.0
+    elevation_dir: str = SUN_DIR_FALLING
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to JSON-compatible dict."""
+        """Serialize to JSON-compatible dict (only fields the type uses)."""
         if self.type == TRIGGER_SUN_EVENT:
             return {
                 "type": self.type,
                 "sun_event": self.sun_event,
+                "offset_min": self.offset_min,
+            }
+        if self.type == TRIGGER_SUN_AZIMUTH:
+            if self.az_relative:
+                return {
+                    "type": self.type,
+                    "az_relative": True,
+                    "azimuth_offset_deg": self.azimuth_offset_deg,
+                    "offset_min": self.offset_min,
+                }
+            return {
+                "type": self.type,
+                "azimuth_deg": self.azimuth_deg,
+                "offset_min": self.offset_min,
+            }
+        if self.type == TRIGGER_SUN_ELEVATION:
+            return {
+                "type": self.type,
+                "elevation_deg": self.elevation_deg,
+                "elevation_dir": self.elevation_dir,
                 "offset_min": self.offset_min,
             }
         return {"type": self.type, "time_local": self.time_local}
@@ -185,11 +256,21 @@ class Trigger:
     @staticmethod
     def from_dict(data: dict[str, Any]) -> Trigger:
         """Deserialize from store/WS dict."""
+        elevation = _opt_float(data.get("elevation_deg"))
+        if elevation is None:
+            elevation = 0.0
         return Trigger(
             type=_enum(data.get("type"), TRIGGER_TYPES, TRIGGER_FIXED_TIME),
             time_local=str(data.get("time_local") or "07:00"),
             sun_event=_enum(data.get("sun_event"), SUN_EVENTS, SUN_EVENT_SUNSET),
             offset_min=_clamp(data.get("offset_min", 0), -720, 720, 0),
+            azimuth_deg=_clamp(data.get("azimuth_deg", 180), 0, 359, 180),
+            az_relative=bool(data.get("az_relative", False)),
+            azimuth_offset_deg=_clamp(data.get("azimuth_offset_deg", 0), -180, 180, 0),
+            elevation_deg=max(-90.0, min(90.0, elevation)),
+            elevation_dir=_enum(
+                data.get("elevation_dir"), SUN_DIRECTIONS, SUN_DIR_FALLING
+            ),
         )
 
 
@@ -201,6 +282,10 @@ class CoverAction:
     tilt_position: int | None = None
     mode: str = MODE_NORMAL
     min_position_delta: int | None = None  # None → entry default
+    # What the safety rule does when the window contact blocks this closing
+    # move: None → the cover's own safety.mode setting, "block" → keep the
+    # cover where it is, "clamp" → close down to the ventilation position.
+    safety_override: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-compatible dict."""
@@ -209,6 +294,7 @@ class CoverAction:
             "tilt_position": self.tilt_position,
             "mode": self.mode,
             "min_position_delta": self.min_position_delta,
+            "safety_override": self.safety_override,
         }
 
     @staticmethod
@@ -219,6 +305,7 @@ class CoverAction:
             tilt_position=_clamp_opt(data.get("tilt_position"), 0, 100),
             mode=_enum(data.get("mode"), ACTION_MODES, MODE_NORMAL),
             min_position_delta=_clamp_opt(data.get("min_position_delta"), 0, 100),
+            safety_override=_enum_opt(data.get("safety_override"), SAFETY_MODES),
         )
 
 
@@ -230,6 +317,7 @@ class ActionOverride:
     tilt_position: int | None = None
     mode: str | None = None
     min_position_delta: int | None = None
+    safety_override: str | None = None
 
     def is_empty(self) -> bool:
         """Return True when nothing is overridden."""
@@ -238,6 +326,7 @@ class ActionOverride:
             and self.tilt_position is None
             and self.mode is None
             and self.min_position_delta is None
+            and self.safety_override is None
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -247,6 +336,7 @@ class ActionOverride:
             "tilt_position": self.tilt_position,
             "mode": self.mode,
             "min_position_delta": self.min_position_delta,
+            "safety_override": self.safety_override,
         }
 
     @staticmethod
@@ -258,6 +348,7 @@ class ActionOverride:
             tilt_position=_clamp_opt(data.get("tilt_position"), 0, 100),
             mode=mode_raw if mode_raw in ACTION_MODES else None,
             min_position_delta=_clamp_opt(data.get("min_position_delta"), 0, 100),
+            safety_override=_enum_opt(data.get("safety_override"), SAFETY_MODES),
         )
 
 
@@ -286,6 +377,11 @@ class Assignment:
                 ov.min_position_delta
                 if ov.min_position_delta is not None
                 else default.min_position_delta
+            ),
+            safety_override=(
+                ov.safety_override
+                if ov.safety_override is not None
+                else default.safety_override
             ),
         )
 

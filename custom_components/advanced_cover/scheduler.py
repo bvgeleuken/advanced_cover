@@ -19,7 +19,7 @@ import logging
 import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import (
@@ -34,7 +34,7 @@ from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
 )
-from homeassistant.helpers.sun import get_astral_event_date
+from homeassistant.helpers.sun import get_astral_event_date, get_astral_location
 from homeassistant.util import dt as dt_util
 
 from .capabilities import resolve_contact_state
@@ -42,6 +42,7 @@ from .const import (
     RANDOM_DIRECTION_AFTER,
     RANDOM_DIRECTION_BEFORE,
     RESULT_ARMED,
+    RESULT_BLOCKED_SAFETY,
     RESULT_EXPIRED,
     RESULT_SKIPPED,
     RESULT_UNAVAILABLE,
@@ -49,13 +50,17 @@ from .const import (
     RUN_STATE_DONE,
     RUN_STATE_EXPIRED,
     RUN_STATE_IDLE,
+    SUN_ENTITY_ID,
     SUN_EVENT_SOLAR_NOON,
     TRIGGER_FIXED_TIME,
+    TRIGGER_SUN_AZIMUTH,
+    TRIGGER_SUN_ELEVATION,
     WEEKDAYS,
 )
-from .engine import CoverContext, evaluate_conditions
-from .executor import CoverExecutor, current_cover_position
-from .models import Assignment, CoverItem, Scenario
+from .engine import CoverContext, SunContext, evaluate_conditions
+from .executor import CoverExecutor, ExecutionOutcome, current_cover_position
+from .models import Assignment, CoverItem, Scenario, Trigger
+from .sun_math import azimuth_crossing, elevation_crossing, make_angle_funcs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -105,29 +110,85 @@ def compute_occurrence_times(
     day: date,
     tz: Any,
     sun_resolver: Callable[[str, date], datetime | None],
+    position_resolver: Callable[[Trigger, date], datetime | None] | None = None,
 ) -> tuple[datetime, datetime] | None:
     """Return (base time, planned time incl. random) for ``day``, or ``None``.
 
     ``None`` means the scenario has no valid occurrence that day (bad time
-    string, sun event unavailable).
+    string, sun event unavailable, sun never reaching the configured
+    azimuth/elevation that day).
     """
-    if scenario.trigger.type == TRIGGER_FIXED_TIME:
-        parsed = parse_hh_mm(scenario.trigger.time_local)
+    trigger = scenario.trigger
+    if trigger.type == TRIGGER_FIXED_TIME:
+        parsed = parse_hh_mm(trigger.time_local)
         if parsed is None:
             return None
         hour, minute = parsed
         base = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
-    else:
-        sun_time = sun_resolver(scenario.trigger.sun_event, day)
+    elif trigger.type in (TRIGGER_SUN_AZIMUTH, TRIGGER_SUN_ELEVATION):
+        if position_resolver is None:
+            return None
+        sun_time = position_resolver(trigger, day)
         if sun_time is None:
             return None
-        base = sun_time + timedelta(minutes=scenario.trigger.offset_min)
+        base = sun_time + timedelta(minutes=trigger.offset_min)
+    else:
+        sun_time = sun_resolver(trigger.sun_event, day)
+        if sun_time is None:
+            return None
+        base = sun_time + timedelta(minutes=trigger.offset_min)
 
     offset = deterministic_random_offset_min(
         day, scenario.id, scenario.random_window_min, scenario.random_direction
     )
     planned = base + timedelta(minutes=offset)
     return base, planned
+
+
+# Minimum open window after the LAST cover's crossing for a relative
+# azimuth trigger. Without it a retry window of 0 would close the occurrence
+# right after the earliest cover fires and the later covers could never run.
+RELATIVE_GRACE_MIN: Final = 15
+
+
+def compute_relative_occurrence(
+    scenario: Scenario,
+    day: date,
+    cover_azimuths: dict[str, int | None],
+    crossing_resolver: Callable[[float], datetime | None],
+) -> tuple[datetime, datetime, datetime, dict[str, datetime]] | None:
+    """Per-cover fire times for a facade-relative azimuth trigger.
+
+    Returns ``(base, planned, retry_until, fire_at per cover)`` or ``None``
+    when no assigned cover has a (visible) crossing today. ``base`` is the
+    earliest cover's crossing; the daily random offset shifts every cover's
+    time by the same amount so the spread between facades is preserved.
+    Covers without a facade azimuth or without a crossing are simply absent
+    from the map — the evaluation path skips them with a clear reason.
+    """
+    trigger = scenario.trigger
+    raw: dict[str, datetime] = {}
+    for cover_id, azimuth in cover_azimuths.items():
+        if azimuth is None:
+            continue
+        target = (azimuth + trigger.azimuth_offset_deg) % 360
+        when = crossing_resolver(target)
+        if when is not None:
+            raw[cover_id] = when + timedelta(minutes=trigger.offset_min)
+    if not raw:
+        return None
+    base = min(raw.values())
+    shift = timedelta(
+        minutes=deterministic_random_offset_min(
+            day, scenario.id, scenario.random_window_min, scenario.random_direction
+        )
+    )
+    fire_ats = {cover_id: when + shift for cover_id, when in raw.items()}
+    planned = base + shift
+    retry_until = max(fire_ats.values()) + timedelta(
+        minutes=max(scenario.retry_window_min, RELATIVE_GRACE_MIN)
+    )
+    return base, planned, retry_until, fire_ats
 
 
 def _is_terminal(run: AssignmentRun) -> bool:
@@ -176,6 +237,12 @@ class AssignmentRun:
     result: str | None = None
     reason: str | None = None
     armed_until: datetime | None = None
+    # Facade-relative azimuth triggers: this cover's own fire time.
+    fire_at: datetime | None = None
+    # Armed because the safety rule blocked the move (window open). When the
+    # retry window then runs out, the run keeps its "blocked_safety" outcome
+    # instead of degrading to a generic "expired".
+    safety_blocked: bool = False
     rearm_entity_ids: set[str] = field(default_factory=set)
     unsub_listener: CALLBACK_TYPE | None = field(default=None, repr=False)
 
@@ -191,6 +258,7 @@ class AssignmentRun:
             "result": self.result,
             "reason": self.reason,
             "armed_until": (self.armed_until.isoformat() if self.armed_until else None),
+            "fire_at": (self.fire_at.isoformat() if self.fire_at else None),
             "waiting_for": sorted(self.rearm_entity_ids),
         }
 
@@ -280,6 +348,38 @@ class AdvancedCoverScheduler:
             self._started_unsub = None
         self._teardown_plan()
 
+    def _persisted_carryover(
+        self, today: date
+    ) -> tuple[dict[tuple[str, str], AssignmentRun], dict[str, bool]]:
+        """Rebuild carryover inputs from the persisted runtime snapshot.
+
+        Only terminal outcomes are restored (armed runs re-arm through the
+        normal catch-up path). A snapshot from another day yields nothing.
+        """
+        data = self.coordinator.runtime_data_for(today)
+        if not data:
+            return {}, {}
+        runs: dict[tuple[str, str], AssignmentRun] = {}
+        for raw in data.get("runs") or []:
+            if not isinstance(raw, dict):
+                continue
+            scenario_id = str(raw.get("scenario_id") or "")
+            cover_item_id = str(raw.get("cover_item_id") or "")
+            if not scenario_id or not cover_item_id:
+                continue
+            stub = AssignmentRun(
+                cover_item_id=cover_item_id,
+                cover_name="",
+                target_position=0,
+                status=str(raw.get("status") or ""),
+                result=raw.get("result"),
+                reason=raw.get("reason"),
+            )
+            if _is_terminal(stub):
+                runs[(scenario_id, cover_item_id)] = stub
+        fired = {str(sid): bool(f) for sid, f in (data.get("fired") or {}).items()}
+        return runs, fired
+
     def _snapshot_terminal_runs(self) -> dict[tuple[str, str], AssignmentRun]:
         """Capture runs that reached a final outcome, keyed by (scenario, cover).
 
@@ -332,6 +432,71 @@ class AdvancedCoverScheduler:
         when = get_astral_event_date(self.hass, astral_event, day)
         return dt_util.as_local(when) if when else None
 
+    def azimuth_crossing_local(self, target_deg: float, day: date) -> datetime | None:
+        """First visible crossing of ``target_deg`` on ``day`` (local time)."""
+        location, _elevation = get_astral_location(self.hass)
+        azimuth_at, elevation_at = make_angle_funcs(location.observer)
+        tz = dt_util.get_default_time_zone()
+        start = datetime(day.year, day.month, day.day, tzinfo=tz)
+        end = start + timedelta(days=1)
+        return azimuth_crossing(azimuth_at, start, end, target_deg, elevation_at)
+
+    def _position_resolver(self, trigger: Trigger, day: date) -> datetime | None:
+        """Resolve a sun-position trigger to a local datetime for ``day``.
+
+        Uses the numeric solver (no monotonicity assumption), so it works on
+        both hemispheres, in the tropics and at polar latitudes. ``None``
+        means the sun never crosses the configured angle that day.
+        """
+        if trigger.type == TRIGGER_SUN_AZIMUTH:
+            return self.azimuth_crossing_local(float(trigger.azimuth_deg), day)
+        location, _elevation = get_astral_location(self.hass)
+        _azimuth_at, elevation_at = make_angle_funcs(location.observer)
+        tz = dt_util.get_default_time_zone()
+        start = datetime(day.year, day.month, day.day, tzinfo=tz)
+        end = start + timedelta(days=1)
+        return elevation_crossing(
+            elevation_at, start, end, trigger.elevation_deg, trigger.elevation_dir
+        )
+
+    def resolve_trigger_base(self, trigger: Trigger, day: date) -> datetime | None:
+        """Return the base time (no random offset) a trigger resolves to on ``day``.
+
+        Used by the panel's live preview so editor and scheduler can never
+        disagree about the computed time.
+        """
+        if trigger.type == TRIGGER_FIXED_TIME:
+            parsed = parse_hh_mm(trigger.time_local)
+            if parsed is None:
+                return None
+            hour, minute = parsed
+            tz = dt_util.get_default_time_zone()
+            return datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
+        if trigger.type in (TRIGGER_SUN_AZIMUTH, TRIGGER_SUN_ELEVATION):
+            base = self._position_resolver(trigger, day)
+        else:
+            base = self._sun_resolver(trigger.sun_event, day)
+        if base is None:
+            return None
+        return base + timedelta(minutes=trigger.offset_min)
+
+    def _sun_context(self) -> SunContext:
+        """Live sun position snapshot for the condition engine."""
+        state = self.hass.states.get(SUN_ENTITY_ID)
+        if state is None:
+            return SunContext()
+
+        def _num(value: Any) -> float | None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        return SunContext(
+            azimuth=_num(state.attributes.get("azimuth")),
+            elevation=_num(state.attributes.get("elevation")),
+        )
+
     async def async_rebuild_plan(self, *, catch_up: bool = True) -> None:
         """Recompute today's plan; catch up occurrences with open retry windows."""
         async with self._lock:
@@ -348,6 +513,11 @@ class AdvancedCoverScheduler:
             prev_fired = (
                 {occ.scenario_id: occ.fired for occ in self._plan} if same_day else {}
             )
+            if self._plan_date is None:
+                # First build after a restart: restore today's already-decided
+                # outcomes from the runtime store so the day's history survives
+                # and open retry windows can re-arm instead of expiring.
+                prev_runs, prev_fired = self._persisted_carryover(today)
             self._teardown_plan()
 
             data = self.coordinator.data_model
@@ -358,21 +528,46 @@ class AdvancedCoverScheduler:
             for scenario in data.scenarios:
                 if not scenario.enabled or weekday not in scenario.weekdays:
                     continue
-                times = compute_occurrence_times(
-                    scenario, today, tz, self._sun_resolver
-                )
-                if times is None:
-                    _LOGGER.warning(
-                        "Scenario '%s' has no valid trigger time today; skipped",
-                        scenario.name,
+                fire_ats: dict[str, datetime] = {}
+                if (
+                    scenario.trigger.type == TRIGGER_SUN_AZIMUTH
+                    and scenario.trigger.az_relative
+                ):
+                    cover_azimuths = {
+                        a.cover_item_id: cover.azimuth
+                        for a in scenario.assignments
+                        if (cover := data.covers.get(a.cover_item_id)) is not None
+                    }
+                    rel = compute_relative_occurrence(
+                        scenario,
+                        today,
+                        cover_azimuths,
+                        lambda target: self.azimuth_crossing_local(target, today),
                     )
-                    continue
-                base_at, planned_at = times
-                retry_until = (
-                    planned_at + timedelta(minutes=scenario.retry_window_min)
-                    if scenario.retry_window_min > 0
-                    else None
-                )
+                    if rel is None:
+                        _LOGGER.warning(
+                            "Scenario '%s' has no cover with a visible facade "
+                            "crossing today; skipped",
+                            scenario.name,
+                        )
+                        continue
+                    base_at, planned_at, retry_until, fire_ats = rel
+                else:
+                    times = compute_occurrence_times(
+                        scenario, today, tz, self._sun_resolver, self._position_resolver
+                    )
+                    if times is None:
+                        _LOGGER.warning(
+                            "Scenario '%s' has no valid trigger time today; skipped",
+                            scenario.name,
+                        )
+                        continue
+                    base_at, planned_at = times
+                    retry_until = (
+                        planned_at + timedelta(minutes=scenario.retry_window_min)
+                        if scenario.retry_window_min > 0
+                        else None
+                    )
                 occ = Occurrence(
                     scenario_id=scenario.id,
                     scenario_name=scenario.name,
@@ -392,6 +587,7 @@ class AdvancedCoverScheduler:
                         target_position=action.position,
                         target_tilt=action.tilt_position,
                         area_id=cover.area_id,
+                        fire_at=fire_ats.get(assignment.cover_item_id),
                     )
                 # Restore outcomes already decided earlier today, so a config
                 # save neither re-fires nor loses them.
@@ -406,7 +602,7 @@ class AdvancedCoverScheduler:
 
             self._plan = plan
             self._plan_date = today
-            self.coordinator.set_day_plan(plan)
+            self.coordinator.set_day_plan(plan, today)
 
             # Restart / rebuild catch-up: fire missed occurrences whose retry
             # window is still open; expire the rest. Skipped while HA is still
@@ -458,14 +654,29 @@ class AdvancedCoverScheduler:
 
     # ---------------------------------------------------------------- timers
 
+    def _pending_run_times(self, now: datetime) -> list[datetime]:
+        """Future per-cover fire times of armed runs (relative azimuth)."""
+        return [
+            run.fire_at
+            for occ in self._plan
+            if occ.fired
+            for run in occ.runs.values()
+            if run.status == RUN_STATE_ARMED
+            and run.fire_at is not None
+            and run.fire_at > now
+        ]
+
     async def _async_schedule_next_timer(self) -> None:
-        """Arm one timer for the earliest unfired occurrence."""
+        """Arm one timer for the earliest unfired occurrence or pending run."""
         self._cancel_timer()
         now = dt_util.now()
-        upcoming = [o for o in self._plan if not o.fired and o.planned_at > now]
-        if not upcoming:
+        candidates = [
+            o.planned_at for o in self._plan if not o.fired and o.planned_at > now
+        ]
+        candidates.extend(self._pending_run_times(now))
+        if not candidates:
             return
-        when = min(o.planned_at for o in upcoming)
+        when = min(candidates)
 
         async def _on_fire(_now: datetime) -> None:
             self._timer_unsub = None
@@ -478,12 +689,27 @@ class AdvancedCoverScheduler:
                 if not o.fired and o.planned_at <= fire_now + timedelta(seconds=1)
             ]
             await self._async_fire_due(due)
+            await self._async_fire_due_runs(fire_now)
             await self._async_schedule_next_timer()
             self.coordinator.notify_plan_changed()
 
         self._timer_unsub = async_track_point_in_time(
             self.hass, _on_fire, dt_util.as_utc(when)
         )
+
+    async def _async_fire_due_runs(self, now: datetime) -> None:
+        """Re-evaluate armed runs whose own fire time has been reached."""
+        async with self._lock:
+            for occ in self._plan:
+                if not occ.fired:
+                    continue
+                for run in occ.runs.values():
+                    if (
+                        run.status == RUN_STATE_ARMED
+                        and run.fire_at is not None
+                        and run.fire_at <= now + timedelta(seconds=1)
+                    ):
+                        await self._async_evaluate_run(occ, run, first_fire=False)
 
     # ------------------------------------------------------------- execution
 
@@ -505,6 +731,7 @@ class AdvancedCoverScheduler:
             position=position,
             contact=contact,
             contact_entity_id=cover.contact_entity_id,
+            azimuth=cover.azimuth,
         )
 
     def _scenario_and_assignment(
@@ -542,6 +769,8 @@ class AdvancedCoverScheduler:
         """Evaluate one assignment; execute, arm or finish it."""
         if _is_terminal(run):
             return
+        # Re-decided from scratch below; only the safety-blocked path re-sets it.
+        run.safety_blocked = False
         looked_up = self._scenario_and_assignment(occ, run.cover_item_id)
         if looked_up is None:
             self._finish_run(occ, run, RESULT_SKIPPED, "scenario or assignment removed")
@@ -558,9 +787,33 @@ class AdvancedCoverScheduler:
             self._finish_run(occ, run, RESULT_SKIPPED, "cover automation is off")
             return
 
+        if (
+            scenario.trigger.type == TRIGGER_SUN_AZIMUTH
+            and scenario.trigger.az_relative
+        ):
+            if cover.azimuth is None:
+                self._finish_run(
+                    occ, run, RESULT_SKIPPED, "no facade direction configured"
+                )
+                return
+            if run.fire_at is None:
+                self._finish_run(
+                    occ, run, RESULT_SKIPPED, "sun does not reach this facade today"
+                )
+                return
+            if dt_util.now() < run.fire_at:
+                # Not this cover's turn yet: stay armed. The per-run timer in
+                # _async_schedule_next_timer fires it precisely; sun.sun
+                # updates re-check it as a belt-and-braces fallback.
+                reason = "waiting for the sun to reach the facade direction"
+                self._arm_run(occ, run, {SUN_ENTITY_ID}, reason)
+                if first_fire:
+                    self._log_run(occ, run, RESULT_ARMED, reason)
+                return
+
         conditions = [*scenario.conditions, *assignment.extra_conditions]
         evaluation = evaluate_conditions(
-            conditions, self._get_state, self._cover_context(cover)
+            conditions, self._get_state, self._cover_context(cover), self._sun_context()
         )
 
         if evaluation.passed:
@@ -568,21 +821,9 @@ class AdvancedCoverScheduler:
             outcome = await self.executor.async_execute(
                 cover, assignment.resolved_action(scenario.action)
             )
-            if (
-                outcome.result == RESULT_UNAVAILABLE
-                and outcome.unavailable_entity_id
-                and occ.retry_until is not None
-                and dt_util.now() < occ.retry_until
+            if self._arm_for_retryable_outcome(
+                occ, run, cover, outcome, first_fire=first_fire
             ):
-                # The target entity is missing/unavailable (e.g. its
-                # integration is still loading). Within the retry window,
-                # wait for it to come back instead of giving up for the day.
-                reason = outcome.reason or (
-                    f"{outcome.unavailable_entity_id} is unavailable"
-                )
-                self._arm_run(occ, run, {outcome.unavailable_entity_id}, reason)
-                if first_fire:
-                    self._log_run(occ, run, RESULT_ARMED, reason)
                 return
             self._finish_run(occ, run, outcome.result, outcome.reason)
             return
@@ -608,6 +849,38 @@ class AdvancedCoverScheduler:
             return
 
         self._finish_run(occ, run, RESULT_SKIPPED, reason)
+
+    def _arm_for_retryable_outcome(
+        self,
+        occ: Occurrence,
+        run: AssignmentRun,
+        cover: CoverItem,
+        outcome: ExecutionOutcome,
+        *,
+        first_fire: bool,
+    ) -> bool:
+        """Arm a run whose execution failed in a retryable way; return success.
+
+        Within the open retry window an unavailable target entity is awaited
+        (e.g. its integration is still loading) and a safety-blocked closing
+        move waits for the window contact to close — instead of giving up for
+        the day.
+        """
+        if occ.retry_until is None or dt_util.now() >= occ.retry_until:
+            return False
+        if outcome.result == RESULT_UNAVAILABLE and outcome.unavailable_entity_id:
+            reason = outcome.reason or f"{outcome.unavailable_entity_id} is unavailable"
+            entity_ids = {outcome.unavailable_entity_id}
+        elif outcome.result == RESULT_BLOCKED_SAFETY and cover.contact_entity_id:
+            reason = outcome.reason or "safety rule blocks closing"
+            entity_ids = {cover.contact_entity_id}
+            run.safety_blocked = True
+        else:
+            return False
+        self._arm_run(occ, run, entity_ids, reason)
+        if first_fire:
+            self._log_run(occ, run, RESULT_ARMED, reason)
+        return True
 
     def _finish_run(
         self, occ: Occurrence, run: AssignmentRun, result: str, reason: str | None
@@ -707,9 +980,11 @@ class AdvancedCoverScheduler:
         """Retry window ended without the conditions being met."""
         self._disarm(run)
         run.status = RUN_STATE_EXPIRED
-        run.result = RESULT_EXPIRED
+        # A run that spent its window blocked by the safety rule keeps that
+        # outcome — "blocked" is what actually happened, not a mere timeout.
+        run.result = RESULT_BLOCKED_SAFETY if run.safety_blocked else RESULT_EXPIRED
         run.armed_until = None
-        self._log_run(occ, run, RESULT_EXPIRED, run.reason)
+        self._log_run(occ, run, run.result, run.reason)
 
     # ------------------------------------------------------------ manual runs
 
@@ -742,7 +1017,10 @@ class AdvancedCoverScheduler:
             if not ignore_conditions:
                 conditions = [*scenario.conditions, *assignment.extra_conditions]
                 evaluation = evaluate_conditions(
-                    conditions, self._get_state, self._cover_context(cover)
+                    conditions,
+                    self._get_state,
+                    self._cover_context(cover),
+                    self._sun_context(),
                 )
                 if not evaluation.passed:
                     result = RESULT_SKIPPED
