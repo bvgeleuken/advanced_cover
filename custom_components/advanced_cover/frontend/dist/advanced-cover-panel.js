@@ -4571,6 +4571,12 @@ class ViewScenarios extends i {
             >
               ${t(this.hass, "config_panel.safety_override_clamp")}
             </option>
+            <option
+              value="ignore"
+              ?selected=${draft.action.safety_override === "ignore"}
+            >
+              ${t(this.hass, "config_panel.safety_override_ignore")}
+            </option>
           </select>
         </div>
       </div>
@@ -4789,6 +4795,12 @@ class ViewScenarios extends i {
                       ?selected=${ov.safety_override === "clamp"}
                     >
                       ${t(this.hass, "config_panel.safety_override_clamp")}
+                    </option>
+                    <option
+                      value="ignore"
+                      ?selected=${ov.safety_override === "ignore"}
+                    >
+                      ${t(this.hass, "config_panel.safety_override_ignore")}
                     </option>
                   </select>
                 </div>`

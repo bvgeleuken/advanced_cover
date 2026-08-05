@@ -90,16 +90,18 @@ export interface CoverAction {
   min_position_delta: number | null;
   /** Safety-rule behavior when the window contact blocks this closing move:
       null = the cover's own setting, "block" = stay put, "clamp" = close to
-      the ventilation position. */
-  safety_override: "block" | "clamp" | null;
+      the ventilation position, "ignore" = close fully despite the window. */
+  safety_override: SafetyOverride | null;
 }
+
+export type SafetyOverride = "block" | "clamp" | "ignore";
 
 export interface ActionOverride {
   position: number | null;
   tilt_position: number | null;
   mode: "normal" | "low" | null;
   min_position_delta: number | null;
-  safety_override: "block" | "clamp" | null;
+  safety_override: SafetyOverride | null;
 }
 
 export interface Assignment {

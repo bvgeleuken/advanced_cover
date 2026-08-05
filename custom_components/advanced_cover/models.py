@@ -37,6 +37,7 @@ from .const import (
     RANDOM_DIRECTIONS,
     SAFETY_MODE_BLOCK,
     SAFETY_MODES,
+    SAFETY_OVERRIDE_MODES,
     SUN_DIR_FALLING,
     SUN_DIRECTIONS,
     SUN_ENTITY_ID,
@@ -284,7 +285,8 @@ class CoverAction:
     min_position_delta: int | None = None  # None → entry default
     # What the safety rule does when the window contact blocks this closing
     # move: None → the cover's own safety.mode setting, "block" → keep the
-    # cover where it is, "clamp" → close down to the ventilation position.
+    # cover where it is, "clamp" → close down to the ventilation position,
+    # "ignore" → close fully despite the open window (e.g. at night).
     safety_override: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -305,7 +307,9 @@ class CoverAction:
             tilt_position=_clamp_opt(data.get("tilt_position"), 0, 100),
             mode=_enum(data.get("mode"), ACTION_MODES, MODE_NORMAL),
             min_position_delta=_clamp_opt(data.get("min_position_delta"), 0, 100),
-            safety_override=_enum_opt(data.get("safety_override"), SAFETY_MODES),
+            safety_override=_enum_opt(
+                data.get("safety_override"), SAFETY_OVERRIDE_MODES
+            ),
         )
 
 
@@ -348,7 +352,9 @@ class ActionOverride:
             tilt_position=_clamp_opt(data.get("tilt_position"), 0, 100),
             mode=mode_raw if mode_raw in ACTION_MODES else None,
             min_position_delta=_clamp_opt(data.get("min_position_delta"), 0, 100),
-            safety_override=_enum_opt(data.get("safety_override"), SAFETY_MODES),
+            safety_override=_enum_opt(
+                data.get("safety_override"), SAFETY_OVERRIDE_MODES
+            ),
         )
 
 

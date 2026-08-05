@@ -14,7 +14,7 @@ Rule-based, scenario-driven automation for covers (shutters, venetian blinds, aw
 
 - **Scenarios instead of automations** — one trigger, curated sentence-builder conditions, per-cover assignments with overrides
 - **Re-arm window** — "at 13:00 if sunny" also fires when the sun arrives at 13:37 (event-driven, no polling, at most once per day)
-- **Built-in safety rule** — an open window is never fully shut by automation
+- **Built-in safety rule** — an open window is never fully shut by automation, unless a scenario explicitly overrides it (e.g. a night close)
 - **Deterministic day plan** — random offsets are rolled once per day; restarts change nothing
 - **Complete configuration in the GUI** — Today · Covers · Scenarios · Log, no YAML
 - **Pure orchestrator** — drives only existing HA entities; weather/presence signals come from *your* helpers
@@ -130,7 +130,7 @@ All services accept an optional `config_entry_id` (needed only with multiple ent
 - **Idempotent** — `min position delta` skips moves when the cover is already close enough to the target (protects motors, avoids twitching after restarts).
 - **Deterministic** — the full day plan including random offsets is computed at midnight, seeded with date + scenario id. The Today tab shows exact times; a restart re-enters open re-arm windows instead of losing them.
 - **Restart-proof** — today's outcomes and the action log are persisted, so a Home Assistant restart neither wipes the day's history nor re-reports fired scenarios as "expired".
-- **Safety rule, not disableable** — with an open contact, automatic closing below the ventilation position is blocked (or clamped). Tilted does not block by default (configurable per cover). Opening and manual control are never restricted. Whether a blocked move stays put or still closes to the ventilation position can be chosen per scenario and overridden per assignment; within the re-arm window a blocked cover retries as soon as the window is closed.
+- **Safety rule, not disableable** — with an open contact, automatic closing below the ventilation position is blocked (or clamped). Tilted does not block by default (configurable per cover). Opening and manual control are never restricted. Whether a blocked move stays put, still closes to the ventilation position, or — as an explicit per-scenario opt-in — closes fully despite the open window (e.g. a night close) can be chosen per scenario and overridden per assignment; within the re-arm window a blocked cover retries as soon as the window is closed.
 
 ## Recipes
 
@@ -180,7 +180,7 @@ No. There is no manual-movement detection and cover-position conditions never re
 No. A scenario is a set of **independent per-cover actions**. Every condition — the scenario's "only if" and any per-cover condition — is evaluated **for each cover on its own**. A *window contact* condition uses that cover's own contact sensor, so "only if the contact is closed" skips only the covers whose window is open; the others still run (each logged with its reason). A condition on a *shared* entity (e.g. one weather helper) is identical for every cover, so it lets them all run or skips them all together. Often you don't even need the condition: the built-in **safety rule** already stops any single cover from closing past its ventilation position while its own window is open.
 
 **What does the "Ignore conditions" checkbox next to "Run now" do?**
-*Run now* fires the scenario immediately — a manual, ephemeral run that ignores the trigger time and never touches today's plan. Tick **Ignore conditions** to also bypass the "only if" checks, so every assigned cover moves to its target regardless of the current state — handy to preview positions or test a scenario at the "wrong" time of day. The safety rule still applies: an open window is never fully closed.
+*Run now* fires the scenario immediately — a manual, ephemeral run that ignores the trigger time and never touches today's plan. Tick **Ignore conditions** to also bypass the "only if" checks, so every assigned cover moves to its target regardless of the current state — handy to preview positions or test a scenario at the "wrong" time of day. The safety rule still applies: an open window is never fully closed (unless the scenario's safety override says so).
 
 ## Debug logging
 

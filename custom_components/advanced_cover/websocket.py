@@ -36,6 +36,7 @@ from .const import (
     CONTACT_TILTED,
     DOMAIN,
     SAFETY_MODE_CLAMP,
+    SAFETY_MODE_IGNORE,
     SUN_ENTITY_ID,
 )
 from .coordinator import AdvancedCoverCoordinator
@@ -50,6 +51,7 @@ from .engine import (
     rollup_preflight,
     safety_clamp_eval,
     safety_condition_eval,
+    safety_ignore_eval,
     safety_would_block,
 )
 from .executor import current_cover_position
@@ -211,7 +213,10 @@ def _assignment_preflight(
         if blocked:
             resolved = assignment.resolved_action(scenario.action)
             mode = resolved.safety_override or cover.safety.mode
-            if mode == SAFETY_MODE_CLAMP:
+            if mode == SAFETY_MODE_IGNORE:
+                # Override runs to the full target — informational only.
+                evals.append(safety_ignore_eval())
+            elif mode == SAFETY_MODE_CLAMP:
                 # Clamp mode still runs — show what will happen, not a blocker.
                 evals.append(
                     safety_clamp_eval(

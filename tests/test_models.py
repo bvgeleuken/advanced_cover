@@ -9,6 +9,7 @@ from custom_components.advanced_cover.models import (
     CoverAction,
     CoverItem,
     EntryData,
+    SafetyConfig,
     Scenario,
     Trigger,
 )
@@ -232,9 +233,22 @@ def test_cover_action_safety_override_round_trip():
     action = CoverAction.from_dict({"position": 0, "safety_override": "clamp"})
     assert action.safety_override == "clamp"
     assert CoverAction.from_dict(action.to_dict()).safety_override == "clamp"
+    # "ignore" is a valid override (close fully despite the open window).
+    assert CoverAction.from_dict({"safety_override": "ignore"}).safety_override == (
+        "ignore"
+    )
+    assert (
+        ActionOverride.from_dict({"safety_override": "ignore"}).safety_override
+        == "ignore"
+    )
     # Unknown values fall back to None (= use the cover's own safety mode).
     assert CoverAction.from_dict({"safety_override": "bogus"}).safety_override is None
     assert CoverAction.from_dict({}).safety_override is None
+
+
+def test_safety_config_mode_rejects_ignore():
+    # "ignore" is override-only; a cover's own mode falls back to "block".
+    assert SafetyConfig.from_dict({"mode": "ignore"}).mode == "block"
 
 
 def test_action_override_safety_override_inherits_and_wins():
