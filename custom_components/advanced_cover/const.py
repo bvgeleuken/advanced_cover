@@ -134,7 +134,11 @@ DEFAULT_VENTILATION_POSITION: Final = 20
 # --- Safety rule ---
 SAFETY_MODE_BLOCK: Final = "block"
 SAFETY_MODE_CLAMP: Final = "clamp"
+# "ignore" is only valid as a scenario/assignment override, never as a
+# cover's own safety mode — the per-cover default must stay safe.
+SAFETY_MODE_IGNORE: Final = "ignore"
 SAFETY_MODES: Final = (SAFETY_MODE_BLOCK, SAFETY_MODE_CLAMP)
+SAFETY_OVERRIDE_MODES: Final = (*SAFETY_MODES, SAFETY_MODE_IGNORE)
 
 # --- Per-assignment daily run states ---
 RUN_STATE_IDLE: Final = "idle"

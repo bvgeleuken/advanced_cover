@@ -299,3 +299,29 @@ def test_safety_override_block_beats_cover_clamp_mode(loop):
     )
     assert outcome.result == "blocked_safety"
     assert hass.services.calls == []
+
+
+def test_safety_override_ignore_closes_fully_despite_open_window(loop):
+    hass = _hass_with_contact(cover_pos=80, contact_state="on")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(
+            _contact_cover(mode="block"),
+            CoverAction(position=0, safety_override="ignore"),
+        )
+    )
+    assert outcome.result == "executed"
+    assert hass.services.calls[-1][2]["position"] == 0
+
+
+def test_safety_override_ignore_beats_cover_clamp_mode(loop):
+    hass = _hass_with_contact(cover_pos=80, contact_state="on")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(
+            _contact_cover(mode="clamp"),
+            CoverAction(position=0, safety_override="ignore"),
+        )
+    )
+    assert outcome.result == "executed"
+    assert hass.services.calls[-1][2]["position"] == 0

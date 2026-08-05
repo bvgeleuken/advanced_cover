@@ -4571,6 +4571,12 @@ class ViewScenarios extends i {
             >
               ${t(this.hass, "config_panel.safety_override_clamp")}
             </option>
+            <option
+              value="ignore"
+              ?selected=${draft.action.safety_override === "ignore"}
+            >
+              ${t(this.hass, "config_panel.safety_override_ignore")}
+            </option>
           </select>
         </div>
       </div>
@@ -4789,6 +4795,12 @@ class ViewScenarios extends i {
                       ?selected=${ov.safety_override === "clamp"}
                     >
                       ${t(this.hass, "config_panel.safety_override_clamp")}
+                    </option>
+                    <option
+                      value="ignore"
+                      ?selected=${ov.safety_override === "ignore"}
+                    >
+                      ${t(this.hass, "config_panel.safety_override_ignore")}
                     </option>
                   </select>
                 </div>`
@@ -6333,7 +6345,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

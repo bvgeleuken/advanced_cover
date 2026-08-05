@@ -41,6 +41,7 @@ from .const import (
     RESULT_SKIPPED,
     RESULT_UNAVAILABLE,
     SAFETY_MODE_CLAMP,
+    SAFETY_MODE_IGNORE,
 )
 from .models import CoverAction, CoverItem
 
@@ -96,7 +97,9 @@ class CoverExecutor:
 
         With an open window contact (or tilted, if configured to block),
         *closing* moves below the ventilation position are blocked or
-        clamped. Opening moves are never restricted. The rule only applies
+        clamped — unless the resolved mode is "ignore", which closes to
+        the full target despite the open window (e.g. a night scenario).
+        Opening moves are never restricted. The rule only applies
         when a contact sensor is configured — for awnings and covers
         without a contact it is inert by construction. The action's
         ``safety_override`` (scenario/assignment level) takes precedence
@@ -121,6 +124,13 @@ class CoverExecutor:
             # Not a closing move (fail-safe: unknown position counts as closing).
             return target_position, None
         mode = action.safety_override or cover.safety.mode
+        if mode == SAFETY_MODE_IGNORE:
+            _LOGGER.debug(
+                "Safety override ignores open contact on %s; closing to %s%%",
+                cover.name,
+                target_position,
+            )
+            return target_position, None
         if mode == SAFETY_MODE_CLAMP:
             _LOGGER.debug(
                 "Safety rule clamps %s to ventilation position %s%%",

@@ -28,6 +28,7 @@ import type {
   HomeAssistant,
   Occurrence,
   PanelSnapshot,
+  SafetyOverride,
   Scenario,
   TriggerPreview,
 } from "../types";
@@ -1444,7 +1445,7 @@ export class ViewScenarios extends LitElement {
                 action: {
                   ...draft.action,
                   safety_override:
-                    value === "" ? null : (value as "block" | "clamp"),
+                    value === "" ? null : (value as SafetyOverride),
                 },
               });
             }}
@@ -1463,6 +1464,12 @@ export class ViewScenarios extends LitElement {
               ?selected=${draft.action.safety_override === "clamp"}
             >
               ${t(this.hass, "config_panel.safety_override_clamp")}
+            </option>
+            <option
+              value="ignore"
+              ?selected=${draft.action.safety_override === "ignore"}
+            >
+              ${t(this.hass, "config_panel.safety_override_ignore")}
             </option>
           </select>
         </div>
@@ -1669,7 +1676,7 @@ export class ViewScenarios extends LitElement {
                         action_override: {
                           ...ov,
                           safety_override:
-                            value === "" ? null : (value as "block" | "clamp"),
+                            value === "" ? null : (value as SafetyOverride),
                         },
                       });
                     }}
@@ -1688,6 +1695,12 @@ export class ViewScenarios extends LitElement {
                       ?selected=${ov.safety_override === "clamp"}
                     >
                       ${t(this.hass, "config_panel.safety_override_clamp")}
+                    </option>
+                    <option
+                      value="ignore"
+                      ?selected=${ov.safety_override === "ignore"}
+                    >
+                      ${t(this.hass, "config_panel.safety_override_ignore")}
                     </option>
                   </select>
                 </div>`

@@ -307,6 +307,7 @@ _SUM_NUMERIC = "config_panel.cond_sum_numeric"
 _SUM_SUN_POSITION = "config_panel.cond_sum_sun_position"
 _SUM_SAFETY = "config_panel.cond_sum_safety"
 _SUM_SAFETY_CLAMP = "config_panel.cond_sum_safety_clamp"
+_SUM_SAFETY_IGNORE = "config_panel.cond_sum_safety_ignore"
 _SUM_UNAVAILABLE = "config_panel.cond_sum_unavailable"
 _SUM_AUTOMATION_DISABLED = "config_panel.cond_sum_automation_disabled"
 _SUM_INVALID = "config_panel.cond_sum_invalid"
@@ -602,4 +603,20 @@ def safety_clamp_eval(*, ventilation_position: int) -> ConditionEval:
         actual=None,
         summary_key=_SUM_SAFETY_CLAMP,
         summary_values={"ventilation": ventilation_position},
+    )
+
+
+def safety_ignore_eval() -> ConditionEval:
+    """Info line: the safety override closes fully despite the open window.
+
+    ``ok=True`` — the move runs to the full scenario target.
+    """
+    return ConditionEval(
+        scope=SCOPE_SAFETY,
+        type="safety_ignore",
+        entity_id=None,
+        ok=True,
+        actual=None,
+        summary_key=_SUM_SAFETY_IGNORE,
+        summary_values={},
     )
