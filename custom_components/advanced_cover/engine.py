@@ -219,6 +219,30 @@ def evaluate_condition(
     return f"invalid condition: unknown type '{cond.type}'"
 
 
+def is_cover_scoped(cond: Condition) -> bool:
+    """Whether a condition can only be answered against a concrete cover.
+
+    Scenario-level conditions are AND-ed onto every assigned cover at trigger
+    time (see :meth:`scheduler._async_run_assignment`), so these types are
+    perfectly valid in a scenario — they simply have to be evaluated once per
+    cover instead of once per scenario.
+    """
+    if cond.type in (COND_COVER_POSITION, COND_CONTACT):
+        return True
+    return cond.type == COND_SUN_POSITION and cond.az_mode == AZ_MODE_RELATIVE
+
+
+def split_cover_scoped(
+    conditions: list[Condition],
+) -> tuple[list[Condition], list[Condition]]:
+    """Split conditions into (scenario-wide, cover-scoped), keeping order."""
+    wide: list[Condition] = []
+    scoped: list[Condition] = []
+    for cond in conditions:
+        (scoped if is_cover_scoped(cond) else wide).append(cond)
+    return wide, scoped
+
+
 def _rearm_entities_for(cond: Condition, cover: CoverContext) -> list[str]:
     """External entities whose changes may satisfy this failed condition.
 
@@ -309,6 +333,9 @@ _SUM_SAFETY = "config_panel.cond_sum_safety"
 _SUM_SAFETY_CLAMP = "config_panel.cond_sum_safety_clamp"
 _SUM_SAFETY_IGNORE = "config_panel.cond_sum_safety_ignore"
 _SUM_UNAVAILABLE = "config_panel.cond_sum_unavailable"
+_SUM_POSITION_UNKNOWN = "config_panel.cond_sum_position_unknown"
+_SUM_NO_CONTACT = "config_panel.cond_sum_no_contact"
+_SUM_NO_FACADE = "config_panel.cond_sum_no_facade"
 _SUM_AUTOMATION_DISABLED = "config_panel.cond_sum_automation_disabled"
 _SUM_INVALID = "config_panel.cond_sum_invalid"
 
@@ -368,6 +395,8 @@ def _condition_unavailable(
     if cond.type == COND_CONTACT:
         return cover.contact_entity_id is None or cover.contact == CONTACT_UNKNOWN
     if cond.type == COND_SUN_POSITION:
+        if cond.az_mode == AZ_MODE_RELATIVE and cover.azimuth is None:
+            return True
         return sun.azimuth is None or sun.elevation is None
     return False
 
@@ -418,9 +447,19 @@ def _summary_for(
     unavailable: bool,
 ) -> tuple[str, dict[str, Any]]:
     """Build (summary_key, values) for a condition's checklist line."""
-    if unavailable and cond.type == COND_SUN_POSITION:
-        return _SUM_UNAVAILABLE, {"entity": "sun.sun"}
     if unavailable:
+        # Cover-scoped types carry no entity id of their own — name the thing
+        # that is actually missing instead of rendering a bare "?".
+        if cond.type == COND_SUN_POSITION:
+            if cond.az_mode == AZ_MODE_RELATIVE and cover.azimuth is None:
+                return _SUM_NO_FACADE, {}
+            return _SUM_UNAVAILABLE, {"entity": "sun.sun"}
+        if cond.type == COND_COVER_POSITION:
+            return _SUM_POSITION_UNKNOWN, {}
+        if cond.type == COND_CONTACT:
+            if cover.contact_entity_id is None:
+                return _SUM_NO_CONTACT, {}
+            return _SUM_UNAVAILABLE, {"entity": cover.contact_entity_id}
         return _SUM_UNAVAILABLE, {"entity": cond.entity_id or "?"}
     if cond.type == COND_ENTITY_STATE:
         return _SUM_ENTITY_STATE, {

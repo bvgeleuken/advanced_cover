@@ -53,9 +53,18 @@ from .engine import (
     safety_condition_eval,
     safety_ignore_eval,
     safety_would_block,
+    split_cover_scoped,
 )
 from .executor import current_cover_position
-from .models import CoverItem, EntryConfig, EntryData, Scenario, Trigger, new_id
+from .models import (
+    Condition,
+    CoverItem,
+    EntryConfig,
+    EntryData,
+    Scenario,
+    Trigger,
+    new_id,
+)
 from .scheduler import AdvancedCoverScheduler
 
 _LOGGER = logging.getLogger(__name__)
@@ -183,9 +192,16 @@ def _assignment_preflight(
     cover: CoverItem | None,
     run: dict[str, Any],
     *,
+    scenario_cover_conditions: list[Condition],
     now_iso: str,
 ) -> dict[str, Any]:
-    """Preflight for one cover run: extra conditions + safety + availability."""
+    """Preflight for one cover run: extra conditions + safety + availability.
+
+    ``scenario_cover_conditions`` are the scenario's own cover-scoped
+    conditions (position/contact/relative sun). The trigger path AND-s them
+    onto every cover, so they are evaluated here — with this cover's context —
+    rather than once for the whole block, where no cover is in scope.
+    """
     assignment = next(
         (a for a in scenario.assignments if a.cover_item_id == run["cover_item_id"]),
         None,
@@ -196,6 +212,13 @@ def _assignment_preflight(
         return rollup_preflight([disabled_condition_eval(SCOPE_ASSIGNMENT)], now_iso)
     ctx = _cover_context(hass, cover)
     evals = evaluate_conditions_detailed(
+        scenario_cover_conditions,
+        _get_state(hass),
+        ctx,
+        SCOPE_SCENARIO,
+        _sun_context(hass),
+    )
+    evals += evaluate_conditions_detailed(
         assignment.extra_conditions,
         _get_state(hass),
         ctx,
@@ -243,12 +266,15 @@ def _enrich_occurrence(
         occ_dict["covers_would_run"] = 0
         return occ_dict
 
-    # Block-level preflight: the scenario's own conditions (shared by all covers).
+    # Block-level preflight: the scenario conditions that hold for every cover.
+    # Cover-scoped ones move into the per-cover preflight below.
+    wide_conditions, cover_conditions = split_cover_scoped(scenario.conditions)
     if not data.config.enabled:
         block_evals = [disabled_condition_eval(SCOPE_SCENARIO)]
+        cover_conditions = []
     else:
         block_evals = evaluate_conditions_detailed(
-            scenario.conditions,
+            wide_conditions,
             _get_state(hass),
             CoverContext(),
             SCOPE_SCENARIO,
@@ -260,7 +286,15 @@ def _enrich_occurrence(
     would_run = 0
     for run in occ_dict.get("assignments", []):
         cover = data.covers.get(run["cover_item_id"])
-        pf = _assignment_preflight(hass, data, scenario, cover, run, now_iso=now_iso)
+        pf = _assignment_preflight(
+            hass,
+            data,
+            scenario,
+            cover,
+            run,
+            scenario_cover_conditions=cover_conditions,
+            now_iso=now_iso,
+        )
         run["preflight"] = pf
         if (
             block_pf["verdict"] == VERDICT_WOULD_RUN

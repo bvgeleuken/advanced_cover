@@ -18,7 +18,7 @@ import {
 import { renderHelp } from "../help";
 import { t } from "../i18n";
 import { stripEditScenarioQueryFromUrl } from "../navigation";
-import { preflightBadge } from "../preflight";
+import { occPreflightBadge } from "../preflight";
 import { sharedStyles } from "../styles";
 import type {
   ActionOverride,
@@ -751,7 +751,7 @@ export class ViewScenarios extends LitElement {
     const occ = this._occFor(s);
     if (!occ) return nothing;
     if (occ.fired) return this._renderResultBadge(occ);
-    return preflightBadge(this.hass, occ.preflight);
+    return occPreflightBadge(this.hass, occ);
   }
 
   private _renderRow(scenario: Scenario, index: number, total: number) {
