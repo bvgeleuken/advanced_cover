@@ -11,8 +11,10 @@ import { renderHelp } from "../help";
 import { t } from "../i18n";
 import { exportPath } from "../navigation";
 import {
-  preflightBadge,
-  preflightReason,
+  condSummary,
+  occPreflightBadge,
+  occPreflightReason,
+  occVerdict,
   renderCondChecklist,
 } from "../preflight";
 import { formatReason, reasonSeverity } from "../reasons";
@@ -30,7 +32,7 @@ type Filter = "all" | "upcoming" | "issues";
 
 /** Aggregate display kind of a block: preflight verdict, or real result. */
 function occKind(occ: Occurrence): string {
-  if (!occ.fired) return occ.preflight?.verdict ?? "would_run";
+  if (!occ.fired) return occVerdict(occ);
   const runs = occ.assignments;
   if (runs.some((r) => r.status === "armed")) return "armed";
   if (runs.some((r) => r.result === "blocked_safety")) return "blocked_safety";
@@ -121,7 +123,8 @@ function occHasIssue(occ: Occurrence): boolean {
       ["blocked_safety", "unavailable"].includes(r.result ?? "")
     );
   }
-  if (occ.preflight && occ.preflight.verdict !== "would_run") return true;
+  if (occVerdict(occ) !== "would_run") return true;
+  // Partially blocked blocks still deserve the issues filter.
   return occ.assignments.some(
     (r) => r.preflight && r.preflight.verdict !== "would_run"
   );
@@ -705,7 +708,7 @@ export class ViewToday extends LitElement {
     const occMin = minutesOfDay(occ.planned_at) ?? 0;
     const inMin = Math.max(0, occMin - nowMin);
     const targetPos = occ.assignments[0]?.target_position ?? 0;
-    const reason = preflightReason(this.hass, occ.preflight);
+    const reason = occPreflightReason(this.hass, occ);
     return html`
       <div class="nextup">
         <div class="nextup-label">${t(this.hass, "config_panel.today_next_up")}</div>
@@ -714,7 +717,7 @@ export class ViewToday extends LitElement {
           <span class="nextup-in"
             >${t(this.hass, "config_panel.today_in_min", { n: inMin })}</span
           >
-          ${preflightBadge(this.hass, occ.preflight)}
+          ${occPreflightBadge(this.hass, occ)}
         </div>
         <div class="nextup-name">${occ.scenario_name}</div>
         <div class="nextup-detail">
@@ -883,8 +886,17 @@ export class ViewToday extends LitElement {
     // everyday outcomes (trigger passed, already in position), where the
     // status badge alone is enough and a repeated hint per cover is noise.
     const severity = reasonSeverity(run.reason);
-    const reason =
-      occ.fired && run.result !== "executed" && severity !== "noise"
+    // Before firing: the cover's own failing condition (a scenario condition
+    // like "position above 5%" is checked per cover, so this is where it
+    // belongs). After firing: the recorded reason.
+    const pending = !occ.fired
+      ? (run.preflight?.conditions ?? []).find(
+          (c) => c.scope !== "safety" && c.ok !== true
+        )
+      : undefined;
+    const reason = pending
+      ? condSummary(this.hass, pending)
+      : occ.fired && run.result !== "executed" && severity !== "noise"
         ? formatReason(this.hass, run.reason)
         : null;
     const severe =
@@ -929,7 +941,7 @@ export class ViewToday extends LitElement {
     const kind = occKind(occ);
     const expanded = this._isExpanded(occ);
     const reason = !occ.fired
-      ? preflightReason(this.hass, occ.preflight)
+      ? occPreflightReason(this.hass, occ)
       : occReasonSummary(this.hass, occ);
     return html`
       <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
@@ -953,7 +965,7 @@ export class ViewToday extends LitElement {
                 : nothing}
               ${occ.fired
                 ? this._renderResultBadge(occ)
-                : preflightBadge(this.hass, occ.preflight)}
+                : occPreflightBadge(this.hass, occ)}
               ${occ.fired &&
               occ.assignments.some((r) => r.status === "armed") &&
               occ.retry_until

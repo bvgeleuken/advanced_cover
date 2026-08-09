@@ -3174,22 +3174,72 @@ function condSummary(hass, cond) {
     }
     return t(hass, cond.summary_key, values);
 }
+/** Verdict of one occurrence: the block's own conditions plus every cover's.
+
+    Cover-scoped conditions (position, contact, relative sun) live in the
+    per-cover preflights, so a block whose own conditions all pass can still
+    end up with no cover running — the badge has to say so. */
+function occVerdict(occ) {
+    const block = occ.preflight?.verdict ?? "would_run";
+    if (block !== "would_run" || !occ.assignments.length)
+        return block;
+    if (occ.covers_would_run > 0)
+        return "would_run";
+    const kinds = occ.assignments.map((r) => r.preflight?.verdict ?? "would_run");
+    if (kinds.includes("would_skip"))
+        return "would_skip";
+    return kinds.includes("unknown") ? "unknown" : "would_run";
+}
+/** The occurrence's blocking reason: from the block, else from its covers. */
+function occPreflightReason(hass, occ) {
+    const fromBlock = preflightReason(hass, occ.preflight);
+    if (fromBlock)
+        return fromBlock;
+    for (const run of occ.assignments) {
+        const reason = preflightReason(hass, run.preflight);
+        if (reason)
+            return reason;
+    }
+    return null;
+}
+/** Preflight badge for a whole occurrence (block + per-cover conditions). */
+function occPreflightBadge(hass, occ) {
+    const pf = occ.preflight;
+    if (!pf)
+        return A;
+    const verdict = occVerdict(occ);
+    // The scenario's cover-scoped conditions live in the per-cover preflights;
+    // they count as "this scenario has conditions" just like the block's own.
+    const hasConditions = pf.conditions.length > 0 ||
+        occ.assignments.some((r) => (r.preflight?.conditions ?? []).some((c) => c.scope === "scenario"));
+    if (verdict === "would_run" && !hasConditions)
+        return A;
+    return preflightBadge(hass, pf, {
+        verdict,
+        reason: occPreflightReason(hass, occ),
+        force: true,
+    });
+}
 /**
  * The preflight badge ("Would run now" / "Would be skipped now" / "Cannot be
  * evaluated"). Renders nothing for a scenario without conditions (no noise).
+ * ``reason`` is appended to the tooltip so hovering explains the verdict.
  */
-function preflightBadge(hass, pf) {
+function preflightBadge(hass, pf, options = {}) {
     if (!pf)
         return A;
-    if (pf.verdict === "would_run" && pf.conditions.length === 0)
+    const verdict = options.verdict ?? pf.verdict;
+    if (!options.force && verdict === "would_run" && pf.conditions.length === 0)
         return A;
-    const meta = VERDICT_META[pf.verdict];
+    const meta = VERDICT_META[verdict];
+    const checked = t(hass, "config_panel.preflight_evaluated_at", {
+        time: formatTime(pf.evaluated_at),
+    });
+    const reason = options.reason ?? preflightReason(hass, pf);
     return b `
     <span
-      class="preflight-badge ${pf.verdict}"
-      title=${t(hass, "config_panel.preflight_evaluated_at", {
-        time: formatTime(pf.evaluated_at),
-    })}
+      class="preflight-badge ${verdict}"
+      title=${reason ? `${reason} · ${checked}` : checked}
     >
       <ha-icon icon=${meta.icon}></ha-icon>
       ${t(hass, `config_panel.${meta.key}`)}
@@ -3921,7 +3971,7 @@ class ViewScenarios extends i {
             return A;
         if (occ.fired)
             return this._renderResultBadge(occ);
-        return preflightBadge(this.hass, occ.preflight);
+        return occPreflightBadge(this.hass, occ);
     }
     _renderRow(scenario, index, total) {
         const occ = this._occFor(scenario);
@@ -5322,7 +5372,7 @@ const EXPAND_KEY = "ac-today-expanded";
 /** Aggregate display kind of a block: preflight verdict, or real result. */
 function occKind(occ) {
     if (!occ.fired)
-        return occ.preflight?.verdict ?? "would_run";
+        return occVerdict(occ);
     const runs = occ.assignments;
     if (runs.some((r) => r.status === "armed"))
         return "armed";
@@ -5418,8 +5468,9 @@ function occHasIssue(occ) {
     if (occ.fired) {
         return occ.assignments.some((r) => ["blocked_safety", "unavailable"].includes(r.result ?? ""));
     }
-    if (occ.preflight && occ.preflight.verdict !== "would_run")
+    if (occVerdict(occ) !== "would_run")
         return true;
+    // Partially blocked blocks still deserve the issues filter.
     return occ.assignments.some((r) => r.preflight && r.preflight.verdict !== "would_run");
 }
 class ViewToday extends i {
@@ -5987,7 +6038,7 @@ class ViewToday extends i {
         const occMin = minutesOfDay(occ.planned_at) ?? 0;
         const inMin = Math.max(0, occMin - nowMin);
         const targetPos = occ.assignments[0]?.target_position ?? 0;
-        const reason = preflightReason(this.hass, occ.preflight);
+        const reason = occPreflightReason(this.hass, occ);
         return b `
       <div class="nextup">
         <div class="nextup-label">${t(this.hass, "config_panel.today_next_up")}</div>
@@ -5996,7 +6047,7 @@ class ViewToday extends i {
           <span class="nextup-in"
             >${t(this.hass, "config_panel.today_in_min", { n: inMin })}</span
           >
-          ${preflightBadge(this.hass, occ.preflight)}
+          ${occPreflightBadge(this.hass, occ)}
         </div>
         <div class="nextup-name">${occ.scenario_name}</div>
         <div class="nextup-detail">
@@ -6149,9 +6200,17 @@ class ViewToday extends i {
         // everyday outcomes (trigger passed, already in position), where the
         // status badge alone is enough and a repeated hint per cover is noise.
         const severity = reasonSeverity(run.reason);
-        const reason = occ.fired && run.result !== "executed" && severity !== "noise"
-            ? formatReason(this.hass, run.reason)
-            : null;
+        // Before firing: the cover's own failing condition (a scenario condition
+        // like "position above 5%" is checked per cover, so this is where it
+        // belongs). After firing: the recorded reason.
+        const pending = !occ.fired
+            ? (run.preflight?.conditions ?? []).find((c) => c.scope !== "safety" && c.ok !== true)
+            : undefined;
+        const reason = pending
+            ? condSummary(this.hass, pending)
+            : occ.fired && run.result !== "executed" && severity !== "noise"
+                ? formatReason(this.hass, run.reason)
+                : null;
         const severe = ["unavailable", "blocked_safety"].includes(kind) || severity === "error";
         return b `
       <div class="cover-line">
@@ -6192,7 +6251,7 @@ class ViewToday extends i {
         const kind = occKind(occ);
         const expanded = this._isExpanded(occ);
         const reason = !occ.fired
-            ? preflightReason(this.hass, occ.preflight)
+            ? occPreflightReason(this.hass, occ)
             : occReasonSummary(this.hass, occ);
         return b `
       <div class="block ${kind}" id="block-${ViewToday._occKey(occ)}">
@@ -6216,7 +6275,7 @@ class ViewToday extends i {
             : A}
               ${occ.fired
             ? this._renderResultBadge(occ)
-            : preflightBadge(this.hass, occ.preflight)}
+            : occPreflightBadge(this.hass, occ)}
               ${occ.fired &&
             occ.assignments.some((r) => r.status === "armed") &&
             occ.retry_until
@@ -6345,7 +6404,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.6.1";
+const VERSION = "0.6.2";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

@@ -1,7 +1,12 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { formatTime } from "./helpers";
 import { t } from "./i18n";
-import type { ConditionEval, HomeAssistant, Preflight } from "./types";
+import type {
+  ConditionEval,
+  HomeAssistant,
+  Occurrence,
+  Preflight,
+} from "./types";
 
 const VERDICT_META: Record<
   Preflight["verdict"],
@@ -35,23 +40,84 @@ export function condSummary(hass: HomeAssistant, cond: ConditionEval): string {
   return t(hass, cond.summary_key, values);
 }
 
+/** Verdict of one occurrence: the block's own conditions plus every cover's.
+
+    Cover-scoped conditions (position, contact, relative sun) live in the
+    per-cover preflights, so a block whose own conditions all pass can still
+    end up with no cover running — the badge has to say so. */
+export function occVerdict(occ: Occurrence): Preflight["verdict"] {
+  const block = occ.preflight?.verdict ?? "would_run";
+  if (block !== "would_run" || !occ.assignments.length) return block;
+  if (occ.covers_would_run > 0) return "would_run";
+  const kinds = occ.assignments.map((r) => r.preflight?.verdict ?? "would_run");
+  if (kinds.includes("would_skip")) return "would_skip";
+  return kinds.includes("unknown") ? "unknown" : "would_run";
+}
+
+/** The occurrence's blocking reason: from the block, else from its covers. */
+export function occPreflightReason(
+  hass: HomeAssistant,
+  occ: Occurrence
+): string | null {
+  const fromBlock = preflightReason(hass, occ.preflight);
+  if (fromBlock) return fromBlock;
+  for (const run of occ.assignments) {
+    const reason = preflightReason(hass, run.preflight);
+    if (reason) return reason;
+  }
+  return null;
+}
+
+/** Preflight badge for a whole occurrence (block + per-cover conditions). */
+export function occPreflightBadge(
+  hass: HomeAssistant,
+  occ: Occurrence
+): TemplateResult | typeof nothing {
+  const pf = occ.preflight;
+  if (!pf) return nothing;
+  const verdict = occVerdict(occ);
+  // The scenario's cover-scoped conditions live in the per-cover preflights;
+  // they count as "this scenario has conditions" just like the block's own.
+  const hasConditions =
+    pf.conditions.length > 0 ||
+    occ.assignments.some((r) =>
+      (r.preflight?.conditions ?? []).some((c) => c.scope === "scenario")
+    );
+  if (verdict === "would_run" && !hasConditions) return nothing;
+  return preflightBadge(hass, pf, {
+    verdict,
+    reason: occPreflightReason(hass, occ),
+    force: true,
+  });
+}
+
 /**
  * The preflight badge ("Would run now" / "Would be skipped now" / "Cannot be
  * evaluated"). Renders nothing for a scenario without conditions (no noise).
+ * ``reason`` is appended to the tooltip so hovering explains the verdict.
  */
 export function preflightBadge(
   hass: HomeAssistant,
-  pf: Preflight | null | undefined
+  pf: Preflight | null | undefined,
+  options: {
+    verdict?: Preflight["verdict"];
+    reason?: string | null;
+    force?: boolean;
+  } = {}
 ): TemplateResult | typeof nothing {
   if (!pf) return nothing;
-  if (pf.verdict === "would_run" && pf.conditions.length === 0) return nothing;
-  const meta = VERDICT_META[pf.verdict];
+  const verdict = options.verdict ?? pf.verdict;
+  if (!options.force && verdict === "would_run" && pf.conditions.length === 0)
+    return nothing;
+  const meta = VERDICT_META[verdict];
+  const checked = t(hass, "config_panel.preflight_evaluated_at", {
+    time: formatTime(pf.evaluated_at),
+  });
+  const reason = options.reason ?? preflightReason(hass, pf);
   return html`
     <span
-      class="preflight-badge ${pf.verdict}"
-      title=${t(hass, "config_panel.preflight_evaluated_at", {
-        time: formatTime(pf.evaluated_at),
-      })}
+      class="preflight-badge ${verdict}"
+      title=${reason ? `${reason} · ${checked}` : checked}
     >
       <ha-icon icon=${meta.icon}></ha-icon>
       ${t(hass, `config_panel.${meta.key}`)}

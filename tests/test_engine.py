@@ -369,3 +369,93 @@ def test_sun_preflight_combined_elevation_and_azimuth():
     assert evals[0].ok is True
     assert evals[0].summary_values["az_req"] == "135°-240°"
     assert evals[0].summary_values["elev_req"] == "> 15°"
+
+
+# ------------------------------------------------------- cover-scoped scoping
+
+
+def test_cover_scoped_classification():
+    from custom_components.advanced_cover.engine import is_cover_scoped
+
+    assert is_cover_scoped(Condition(type="cover_position", value=5))
+    assert is_cover_scoped(Condition(type="contact", accepted=["closed"]))
+    assert is_cover_scoped(
+        _sun_cond(above=10, az_mode="relative", az_from=-45, az_to=45)
+    )
+    assert not is_cover_scoped(_sun_cond(above=10))
+    assert not is_cover_scoped(
+        Condition(type="entity_state", entity_id="s.a", states=["on"])
+    )
+    assert not is_cover_scoped(
+        Condition(type="numeric_state", entity_id="s.a", above=1)
+    )
+
+
+def test_split_cover_scoped_keeps_order():
+    from custom_components.advanced_cover.engine import split_cover_scoped
+
+    a = Condition(type="entity_state", entity_id="s.a", states=["on"])
+    b = Condition(type="cover_position", op="above", value=5)
+    c = Condition(type="numeric_state", entity_id="s.b", above=1)
+    wide, scoped = split_cover_scoped([a, b, c])
+    assert wide == [a, c]
+    assert scoped == [b]
+
+
+def test_cover_position_without_cover_names_the_position():
+    # Scenario scope used to evaluate this against an empty cover context and
+    # rendered a bare "?" — the summary must name what is missing.
+    evals = evaluate_conditions_detailed(
+        [Condition(type="cover_position", op="above", value=5)],
+        states({}),
+        CoverContext(),
+        "scenario",
+    )
+    assert evals[0].ok is None
+    assert evals[0].summary_key == "config_panel.cond_sum_position_unknown"
+
+
+def test_cover_position_with_cover_context_is_decided():
+    conds = [Condition(type="cover_position", op="above", value=5)]
+    evals = evaluate_conditions_detailed(
+        conds, states({}), CoverContext(position=100), "scenario"
+    )
+    assert evals[0].ok is True
+    assert rollup_preflight(evals, "NOW")["verdict"] == "would_run"
+
+    evals = evaluate_conditions_detailed(
+        conds, states({}), CoverContext(position=0), "scenario"
+    )
+    assert evals[0].ok is False
+    assert rollup_preflight(evals, "NOW")["verdict"] == "would_skip"
+
+
+def test_contact_summaries_name_the_sensor():
+    cond = Condition(type="contact", accepted=["closed"])
+    evals = evaluate_conditions_detailed([cond], states({}), CoverContext(), "scenario")
+    assert evals[0].ok is None
+    assert evals[0].summary_key == "config_panel.cond_sum_no_contact"
+
+    evals = evaluate_conditions_detailed(
+        [cond],
+        states({}),
+        CoverContext(contact="unknown", contact_entity_id="binary_sensor.w"),
+        "assignment",
+    )
+    assert evals[0].ok is None
+    assert evals[0].summary_key == "config_panel.cond_sum_unavailable"
+    assert evals[0].summary_values["entity"] == "binary_sensor.w"
+
+
+def test_relative_sun_without_facade_is_unknown_not_failed():
+    from custom_components.advanced_cover.engine import SunContext
+
+    evals = evaluate_conditions_detailed(
+        [_sun_cond(above=5, az_mode="relative", az_from=-45, az_to=45)],
+        states({}),
+        CoverContext(position=50),
+        "scenario",
+        SunContext(azimuth=200, elevation=30),
+    )
+    assert evals[0].ok is None
+    assert evals[0].summary_key == "config_panel.cond_sum_no_facade"
