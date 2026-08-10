@@ -459,6 +459,7 @@
     "reason_no_facade": "No facade direction set for this cover",
     "reason_sun_not_reaching": "The sun does not reach this facade today",
     "reason_already_at": "Already at {pos}% — moves smaller than {delta}% are skipped to protect the motor",
+    "reason_safety_clamped": "Window open — stopped at the ventilation position {ventilation}%; closes fully if the window is shut within the re-arm window",
     "reason_service_failed": "Home Assistant service call failed: {error}",
     "reason_master_off": "The automation master switch was off",
     "reason_cover_off": "Automation is switched off for this cover",

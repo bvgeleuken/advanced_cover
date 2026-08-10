@@ -459,6 +459,7 @@
     "reason_no_facade": "Keine Ausrichtung für dieses Cover hinterlegt",
     "reason_sun_not_reaching": "Die Sonne erreicht diese Fassade heute nicht",
     "reason_already_at": "Bereits auf {pos}% — Bewegungen unter {delta}% werden zum Schutz des Motors übersprungen",
+    "reason_safety_clamped": "Fenster offen — auf Lüftungsposition {ventilation}% gestoppt; schließt vollständig, wenn das Fenster im Nachlauf-Fenster geschlossen wird",
     "reason_service_failed": "Home-Assistant-Serviceaufruf fehlgeschlagen: {error}",
     "reason_master_off": "Der Automatik-Hauptschalter war ausgeschaltet",
     "reason_cover_off": "Die Automatik ist für dieses Cover deaktiviert",

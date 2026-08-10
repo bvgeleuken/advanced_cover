@@ -1201,6 +1201,11 @@ function formatReason(hass, reason) {
     m = reason.match(/^contact is (\w+); closing below (\d+)% is blocked$/);
     if (m)
         return t(hass, "config_panel.cond_sum_safety", { ventilation: m[2] });
+    m = reason.match(/^clamped to the ventilation position (\d+)% while the contact is open$/);
+    if (m)
+        return t(hass, "config_panel.reason_safety_clamped", {
+            ventilation: m[1],
+        });
     m = reason.match(/^(?:service|script) call failed: ([\s\S]*)$/);
     if (m)
         return t(hass, "config_panel.reason_service_failed", { error: m[1] });
@@ -6404,7 +6409,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.6.2";
+const VERSION = "0.6.3";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",

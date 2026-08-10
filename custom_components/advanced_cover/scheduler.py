@@ -43,6 +43,7 @@ from .const import (
     RANDOM_DIRECTION_BEFORE,
     RESULT_ARMED,
     RESULT_BLOCKED_SAFETY,
+    RESULT_EXECUTED,
     RESULT_EXPIRED,
     RESULT_SKIPPED,
     RESULT_UNAVAILABLE,
@@ -243,6 +244,12 @@ class AssignmentRun:
     # retry window then runs out, the run keeps its "blocked_safety" outcome
     # instead of degrading to a generic "expired".
     safety_blocked: bool = False
+    # Armed because the safety rule clamped the move to the ventilation
+    # position: the cover did move, just not to the target. ``clamped_result``
+    # is the outcome of that partial move, restored when the window expires.
+    safety_clamped: bool = False
+    clamped_result: str | None = None
+    clamped_reason: str | None = None
     rearm_entity_ids: set[str] = field(default_factory=set)
     unsub_listener: CALLBACK_TYPE | None = field(default=None, repr=False)
 
@@ -769,8 +776,11 @@ class AdvancedCoverScheduler:
         """Evaluate one assignment; execute, arm or finish it."""
         if _is_terminal(run):
             return
-        # Re-decided from scratch below; only the safety-blocked path re-sets it.
+        # Re-decided from scratch below; only the safety paths re-set these.
         run.safety_blocked = False
+        run.safety_clamped = False
+        run.clamped_result = None
+        run.clamped_reason = None
         looked_up = self._scenario_and_assignment(occ, run.cover_item_id)
         if looked_up is None:
             self._finish_run(occ, run, RESULT_SKIPPED, "scenario or assignment removed")
@@ -859,12 +869,13 @@ class AdvancedCoverScheduler:
         *,
         first_fire: bool,
     ) -> bool:
-        """Arm a run whose execution failed in a retryable way; return success.
+        """Arm a run whose execution fell short in a retryable way; return success.
 
         Within the open retry window an unavailable target entity is awaited
-        (e.g. its integration is still loading) and a safety-blocked closing
-        move waits for the window contact to close — instead of giving up for
-        the day.
+        (e.g. its integration is still loading) and a closing move that the
+        safety rule cut short waits for the window contact to close — whether
+        it was blocked outright or clamped to the ventilation position —
+        instead of giving up for the day.
         """
         if occ.retry_until is None or dt_util.now() >= occ.retry_until:
             return False
@@ -875,6 +886,14 @@ class AdvancedCoverScheduler:
             reason = outcome.reason or "safety rule blocks closing"
             entity_ids = {cover.contact_entity_id}
             run.safety_blocked = True
+        elif outcome.safety_clamped and cover.contact_entity_id:
+            # The cover sits at the ventilation position; the target is still
+            # pending. Keep that partial outcome for the expiry log.
+            reason = outcome.reason or "clamped to the ventilation position"
+            entity_ids = {cover.contact_entity_id}
+            run.safety_clamped = True
+            run.clamped_result = outcome.result
+            run.clamped_reason = outcome.reason
         else:
             return False
         self._arm_run(occ, run, entity_ids, reason)
@@ -982,7 +1001,16 @@ class AdvancedCoverScheduler:
         run.status = RUN_STATE_EXPIRED
         # A run that spent its window blocked by the safety rule keeps that
         # outcome — "blocked" is what actually happened, not a mere timeout.
-        run.result = RESULT_BLOCKED_SAFETY if run.safety_blocked else RESULT_EXPIRED
+        # A clamped run likewise keeps the outcome of its partial move: the
+        # cover did go to the ventilation position, it just never got the
+        # chance to close all the way.
+        if run.safety_blocked:
+            run.result = RESULT_BLOCKED_SAFETY
+        elif run.safety_clamped:
+            run.result = run.clamped_result or RESULT_EXECUTED
+            run.reason = run.clamped_reason or run.reason
+        else:
+            run.result = RESULT_EXPIRED
         run.armed_until = None
         self._log_run(occ, run, run.result, run.reason)
 
