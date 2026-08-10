@@ -25,6 +25,13 @@ export function formatReason(
   m = reason.match(/^contact is (\w+); closing below (\d+)% is blocked$/);
   if (m)
     return t(hass, "config_panel.cond_sum_safety", { ventilation: m[2] });
+  m = reason.match(
+    /^clamped to the ventilation position (\d+)% while the contact is open$/
+  );
+  if (m)
+    return t(hass, "config_panel.reason_safety_clamped", {
+      ventilation: m[1],
+    });
   m = reason.match(/^(?:service|script) call failed: ([\s\S]*)$/);
   if (m) return t(hass, "config_panel.reason_service_failed", { error: m[1] });
   if (reason === "waiting for the sun to reach the facade direction")

@@ -162,6 +162,31 @@ def test_safety_clamps_to_ventilation_position(loop):
     )
     assert outcome.result == "executed"
     assert hass.services.calls[-1][2]["position"] == 20
+    # The target was not reached — the scheduler may retry within its window.
+    assert outcome.safety_clamped is True
+    assert "ventilation position 20%" in (outcome.reason or "")
+
+
+def test_safety_clamp_on_already_parked_cover_still_reports_clamped(loop):
+    """A no-op clamp (cover already at the gap) must not look like a plain skip."""
+    hass = _hass_with_contact(cover_pos=20, contact_state="on")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(_contact_cover(mode="clamp"), CoverAction(position=0))
+    )
+    assert outcome.result == "skipped"
+    assert outcome.safety_clamped is True
+    assert hass.services.calls == []
+
+
+def test_unclamped_moves_do_not_set_the_clamped_flag(loop):
+    hass = _hass_with_contact(cover_pos=80, contact_state="off")
+    executor = CoverExecutor(hass, 3)
+    outcome = loop.run_until_complete(
+        executor.async_execute(_contact_cover(mode="clamp"), CoverAction(position=0))
+    )
+    assert outcome.result == "executed"
+    assert outcome.safety_clamped is False
 
 
 def test_safety_allows_closing_when_window_closed(loop):

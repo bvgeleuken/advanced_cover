@@ -350,6 +350,113 @@ async def test_blocked_safety_expiry_keeps_blocked_result(
     await scheduler.async_shutdown()
 
 
+async def test_safety_clamp_within_retry_window_closes_after_contact_shuts(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A clamped run keeps waiting and reaches its target once the window closes."""
+    await use_utc(hass)
+    freezer.move_to("2026-07-03 08:10:00+00:00")
+    executor = StubExecutor(
+        ExecutionOutcome(
+            RESULT_EXECUTED,
+            "clamped to the ventilation position 20% while the contact is open",
+            20,
+            safety_clamped=True,
+        ),
+        ExecutionOutcome(RESULT_EXECUTED, None, 0),
+    )
+    data = make_data(retry_window_min=60)
+    data.covers["c1"].contact_entity_id = "binary_sensor.window"
+    coordinator = StubCoordinator(data)
+    scheduler = AdvancedCoverScheduler(hass, coordinator, executor)
+    await scheduler.async_rebuild_plan()
+    await hass.async_block_till_done()
+
+    run = coordinator.plan[0].runs["c1"]
+    assert run.status == RUN_STATE_ARMED
+    assert run.rearm_entity_ids == {"binary_sensor.window"}
+    assert run.safety_clamped is True
+    assert run.safety_blocked is False
+
+    hass.states.async_set("binary_sensor.window", "off")
+    await hass.async_block_till_done()
+
+    run = coordinator.plan[0].runs["c1"]
+    assert run.status == RUN_STATE_DONE
+    assert run.result == RESULT_EXECUTED
+    assert run.safety_clamped is False
+    assert executor.calls == 2
+
+    await scheduler.async_shutdown()
+
+
+async def test_safety_clamp_expiry_keeps_the_partial_outcome(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Window stays open past the retry window: the clamped move is the outcome."""
+    await use_utc(hass)
+    freezer.move_to("2026-07-03 08:10:00+00:00")
+    executor = StubExecutor(
+        ExecutionOutcome(
+            RESULT_EXECUTED,
+            "clamped to the ventilation position 20% while the contact is open",
+            20,
+            safety_clamped=True,
+        ),
+    )
+    data = make_data(retry_window_min=30)
+    data.covers["c1"].contact_entity_id = "binary_sensor.window"
+    coordinator = StubCoordinator(data)
+    scheduler = AdvancedCoverScheduler(hass, coordinator, executor)
+    await scheduler.async_rebuild_plan()
+    await hass.async_block_till_done()
+    assert coordinator.plan[0].runs["c1"].status == RUN_STATE_ARMED
+
+    freezer.move_to("2026-07-03 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.window", "on")
+    await hass.async_block_till_done()
+
+    run = coordinator.plan[0].runs["c1"]
+    assert run.status == RUN_STATE_EXPIRED
+    # Not "expired": the cover really did move to the ventilation position.
+    assert run.result == RESULT_EXECUTED
+    assert "ventilation position" in (run.reason or "")
+    assert executor.calls == 1
+
+    await scheduler.async_shutdown()
+
+
+async def test_safety_clamp_without_retry_window_finishes(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no retry window a clamped move is simply today's outcome."""
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await use_utc(hass)
+    freezer.move_to("2026-07-03 07:59:00+00:00")
+    executor = StubExecutor(
+        ExecutionOutcome(RESULT_EXECUTED, "clamped", 20, safety_clamped=True),
+    )
+    data = make_data(retry_window_min=0)
+    data.covers["c1"].contact_entity_id = "binary_sensor.window"
+    coordinator = StubCoordinator(data)
+    scheduler = AdvancedCoverScheduler(hass, coordinator, executor)
+    await scheduler.async_rebuild_plan()
+
+    # Trigger time arrives: the run fires once and is done — nothing to wait for.
+    freezer.move_to("2026-07-03 08:00:30+00:00")
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    run = coordinator.plan[0].runs["c1"]
+    assert run.status == RUN_STATE_DONE
+    assert run.result == RESULT_EXECUTED
+    assert executor.calls == 1
+
+    await scheduler.async_shutdown()
+
+
 async def test_restart_carryover_restores_persisted_outcomes(
     hass: HomeAssistant, freezer
 ) -> None:
