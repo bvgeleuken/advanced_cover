@@ -3288,7 +3288,7 @@ function renderCondChecklist(hass, conditions) {
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const RANDOM_WINDOWS = [0, 15, 30, 60];
-const RETRY_WINDOWS = [0, 60, 120, 240, 480];
+const RETRY_WINDOWS = [0, 15, 30, 45, 60, 120, 240, 480];
 const DAYPART_ICONS = {
     night: "mdi:weather-night",
     morning: "mdi:weather-sunset-up",
@@ -4297,7 +4297,7 @@ class ViewScenarios extends i {
           >
             ${w === 0
             ? t(this.hass, "config_panel.off")
-            : w < 120
+            : w < 60
                 ? `${w} min`
                 : `${w / 60} h`}
           </button>`)}
@@ -6409,7 +6409,7 @@ class ViewToday extends i {
 }
 defineCustomElementOnce("ac-view-today", ViewToday);
 
-const VERSION = "0.6.3";
+const VERSION = "0.6.4";
 const PANEL_PAGES = ["today", "covers", "scenarios", "log"];
 const TAB_LABEL_KEYS = {
     today: "config_panel.tab_today",
