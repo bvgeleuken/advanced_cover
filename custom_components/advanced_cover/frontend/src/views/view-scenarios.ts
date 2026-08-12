@@ -35,7 +35,7 @@ import type {
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const RANDOM_WINDOWS = [0, 15, 30, 60];
-const RETRY_WINDOWS = [0, 60, 120, 240, 480];
+const RETRY_WINDOWS = [0, 15, 30, 45, 60, 120, 240, 480];
 
 const DAYPART_ICONS: Record<string, string> = {
   night: "mdi:weather-night",
@@ -1095,7 +1095,7 @@ export class ViewScenarios extends LitElement {
           >
             ${w === 0
               ? t(this.hass, "config_panel.off")
-              : w < 120
+              : w < 60
                 ? `${w} min`
                 : `${w / 60} h`}
           </button>`
