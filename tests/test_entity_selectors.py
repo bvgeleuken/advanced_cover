@@ -125,15 +125,24 @@ def test_state_fields_use_the_native_state_selector() -> None:
 
 
 def test_panel_no_longer_builds_its_own_entity_lists() -> None:
-    """The whole point of the native picker: no hand-rolled option list is left.
-
-    `ac-areas-list` is exempt — areas are not entities and keep their datalist.
-    """
+    """The whole point of the native pickers: no hand-rolled option list is left."""
     source = _frontend_source()
 
     assert "Object.keys(hass.states)" not in source
     assert "renderEntityDatalist" not in source
-    assert re.findall(r"<datalist\s+id=\"([^\"]+)\"", source) == ["ac-areas-list"]
+    assert re.findall(r"<datalist\s+id=\"([^\"]+)\"", source) == []
+
+
+def test_area_field_uses_the_native_area_selector() -> None:
+    """The area field stores an `area_id` while showing the friendly name."""
+    entity_input = _source("entity-input.ts")
+    view_covers = _source("views/view-covers.ts")
+
+    assert "area: { multiple: false }" in entity_input
+    assert "renderAreaField" in view_covers
+    # The old datalist put the raw slug in the text field.
+    assert "ac-areas-list" not in view_covers
+    assert "Object.values(this.hass.areas" not in view_covers
 
 
 def test_panel_startup_cannot_block_on_a_missing_element() -> None:

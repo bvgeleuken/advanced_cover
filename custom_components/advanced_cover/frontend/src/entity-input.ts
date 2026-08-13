@@ -60,6 +60,35 @@ export function renderEntityField(
   `;
 }
 
+/**
+ * Searchable area picker; emits the selected area_id (`""` when cleared).
+ *
+ * The panel used to render a `<datalist>` over `hass.areas`, which put the raw
+ * `area_id` in the text field — the user typed and read the slug while the
+ * friendly name was only a suggestion. The native selector shows the name and
+ * still hands back the id, so the stored `area_id` is unchanged.
+ */
+export function renderAreaField(
+  hass: HomeAssistant,
+  label: string,
+  value: string,
+  onValue: (v: string) => void,
+  { className }: { className?: string } = {}
+): TemplateResult {
+  return html`
+    <ha-selector
+      class=${className ?? ""}
+      .hass=${hass}
+      .selector=${{ area: { multiple: false } }}
+      .label=${label}
+      .value=${value || undefined}
+      .required=${false}
+      @value-changed=${(e: CustomEvent<{ value?: string }>) =>
+        onValue(e.detail.value ?? "")}
+    ></ha-selector>
+  `;
+}
+
 export interface StateFieldOptions {
   /** States already used in the same list — kept out of the dropdown. */
   hideStates?: string[];
