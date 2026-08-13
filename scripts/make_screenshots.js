@@ -83,7 +83,11 @@ async function stripOverlays(page) {
 }
 
 // Clip to the panel header + the tallest stacked cards (no trailing whitespace).
-async function clipToContent(page, file) {
+//
+// `maxHeight` caps the result for views that grow without bound — the log card
+// is as tall as the action history, which is neither readable nor a sensible
+// README image once the sandbox has a few hundred rows.
+async function clipToContent(page, file, maxHeight) {
   await page.waitForFunction(
     (ws) => {
       eval(ws);
@@ -108,7 +112,10 @@ async function clipToContent(page, file) {
     if (view && view.shadowRoot) {
       for (const c of view.shadowRoot.querySelectorAll("*")) {
         const r = c.getBoundingClientRect();
-        if (r.width < 200 || r.height < 24 || r.height >= vh * 0.85) continue;
+        if (r.width < 200 || r.height < 24) continue;
+        // Skip full-height layout wrappers — but never the card itself, which
+        // legitimately outgrows the viewport on a long log.
+        if (r.height >= vh * 0.85 && c.tagName !== "HA-CARD") continue;
         const st = getComputedStyle(c);
         const m = (st.backgroundColor || "").match(/rgba?\(([^)]+)\)/);
         let a = 1;
@@ -122,6 +129,7 @@ async function clipToContent(page, file) {
     }
     return { x: 0, y: 0, width: Math.round(panel.getBoundingClientRect().width), height: Math.round(bottom + 16) };
   }, walkSrc);
+  if (maxHeight && box.height > maxHeight) box.height = maxHeight;
   await page.screenshot({ path: path.join(OUT, file), clip: box });
   return box;
 }
@@ -211,16 +219,16 @@ async function editorShot(page, viewTag, itemName, file) {
     { file: "today.png", page: "today", view: "AC-VIEW-TODAY" },
     { file: "covers.png", page: "covers", view: "AC-VIEW-COVERS" },
     { file: "scenarios.png", page: "scenarios", view: "AC-VIEW-SCENARIOS" },
-    { file: "log.png", page: "log", view: "AC-VIEW-LOG" },
+    { file: "log.png", page: "log", view: "AC-VIEW-LOG", maxHeight: 820 },
   ];
   for (const t of tabs) {
-    await page.setViewport({ width: 900, height: 1000, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 900, height: t.maxHeight ? 1200 : 1000, deviceScaleFactor: 2 });
     await page.goto(`${BASE}/advanced-cover/${ENTRY}/${t.page}`, { waitUntil: "networkidle2", timeout: 30000 });
     await waitForView(page, t.view);
     await sleep(1200);
     await stripOverlays(page);
     await sleep(150);
-    const box = await clipToContent(page, t.file);
+    const box = await clipToContent(page, t.file, t.maxHeight);
     console.log(t.file, JSON.stringify(box));
   }
 
