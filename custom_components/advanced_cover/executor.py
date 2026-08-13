@@ -42,6 +42,7 @@ from .const import (
     RESULT_UNAVAILABLE,
     SAFETY_MODE_CLAMP,
     SAFETY_MODE_IGNORE,
+    SCRIPT_DOMAIN,
 )
 from .models import CoverAction, CoverItem
 
@@ -288,7 +289,7 @@ class CoverExecutor:
         object_id = script_entity.split(".", 1)[-1]
         try:
             await self.hass.services.async_call(
-                "script",
+                SCRIPT_DOMAIN,
                 object_id,
                 {"position": position},
                 blocking=True,

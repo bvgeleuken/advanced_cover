@@ -37,6 +37,7 @@ from .const import (
     DOMAIN,
     SAFETY_MODE_CLAMP,
     SAFETY_MODE_IGNORE,
+    SCRIPT_DOMAIN,
     SUN_ENTITY_ID,
 )
 from .coordinator import AdvancedCoverCoordinator
@@ -716,7 +717,7 @@ async def ws_cover_test(
     elif cover.manual_low_mode and cover.low_mode_script_id and command != "stop":
         position = {"open": 100, "close": 0}.get(command, msg.get("position", 50))
         await hass.services.async_call(
-            "script",
+            SCRIPT_DOMAIN,
             cover.low_mode_script_id.split(".", 1)[-1],
             {"position": position},
             blocking=True,

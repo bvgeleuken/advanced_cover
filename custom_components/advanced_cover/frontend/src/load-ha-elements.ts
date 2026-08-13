@@ -1,4 +1,16 @@
-/** Wait until core HA custom elements used by the panel are defined. */
+/** How long to wait for a core element before rendering anyway. */
+const ELEMENT_TIMEOUT_MS = 2000;
+
+/**
+ * Wait until core HA custom elements used by the panel are defined.
+ *
+ * `customElements.whenDefined()` never rejects — it simply stays pending while
+ * an element is not registered, so a `.catch()` buys nothing. The panel blocks
+ * its first render on this, which means an unresolved tag would leave the whole
+ * panel blank rather than one unstyled field. `ha-entity-picker` and
+ * `ha-selector` are the risky ones: they live in lazily loaded frontend chunks,
+ * so cap the wait and render regardless once it elapses.
+ */
 export async function loadHaPanelElements(): Promise<void> {
   const tags = [
     "ha-menu-button",
@@ -7,8 +19,13 @@ export async function loadHaPanelElements(): Promise<void> {
     "ha-card",
     "ha-icon",
     "ha-switch",
+    "ha-entity-picker",
+    "ha-selector",
   ];
-  await Promise.all(
-    tags.map((tag) => customElements.whenDefined(tag).catch(() => undefined))
-  );
+  const ready = (tag: string): Promise<unknown> =>
+    Promise.race([
+      customElements.whenDefined(tag),
+      new Promise((resolve) => setTimeout(resolve, ELEMENT_TIMEOUT_MS)),
+    ]).catch(() => undefined);
+  await Promise.all(tags.map(ready));
 }

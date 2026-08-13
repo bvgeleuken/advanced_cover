@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { compassStyles, formatAzimuth, renderCompass } from "../compass";
 import { deleteCover, probeCover, saveCover, testCover } from "../data/api";
-import { renderEntityDatalist } from "../entity-input";
+import { renderEntityField, renderEntityStateField } from "../entity-input";
 import { defineCustomElementOnce, formatApiError, formatTime } from "../helpers";
 import { formatReason } from "../reasons";
 import { renderHelp } from "../help";
@@ -357,9 +357,12 @@ export class ViewCovers extends LitElement {
         align-items: center;
         margin-bottom: 6px;
       }
-      .map-row input,
       .map-row select {
         width: auto;
+      }
+      .map-row ha-selector.map-state {
+        flex: 1 1 200px;
+        min-width: 0;
       }
 
       @container acview (max-width: 900px) {
@@ -949,18 +952,28 @@ export class ViewCovers extends LitElement {
       ${entries.map(
         ([raw, meaning]) => html`
           <div class="map-row">
-            <input
-              type="text"
-              style="width:140px"
-              .value=${raw}
-              @change=${(e: Event) => {
-                const newRaw = (e.target as HTMLInputElement).value.trim();
+            ${renderEntityStateField(
+              this.hass,
+              draft.contact_entity_id ?? "",
+              t(this.hass, "config_panel.covers_contact_map_raw"),
+              raw,
+              (v) => {
+                const newRaw = v.trim();
                 const map = { ...draft.contact_state_map };
                 delete map[raw];
                 if (newRaw) map[newRaw] = meaning;
                 this._patchDraft({ contact_state_map: map });
-              }}
-            />
+              },
+              {
+                // A second row on the same raw state would silently overwrite
+                // this one, so keep the states already mapped out of the list.
+                hideStates: entries
+                  .map(([other]) => other)
+                  .filter((other) => other !== raw),
+                helper: t(this.hass, "config_panel.covers_contact_map_needs_entity"),
+                className: "map-state",
+              }
+            )}
             <ha-icon icon="mdi:arrow-right-thin"></ha-icon>
             <select
               .value=${meaning}
@@ -1031,12 +1044,6 @@ export class ViewCovers extends LitElement {
           <div class="dialog-scroll">
             ${this._error ? html`<p class="error">${this._error}</p>` : nothing}
 
-            ${renderEntityDatalist(this.hass, "ac-covers-list", ["cover"])}
-            ${renderEntityDatalist(this.hass, "ac-contacts-list", [
-              "binary_sensor",
-              "sensor",
-            ])}
-            ${renderEntityDatalist(this.hass, "ac-scripts-list", ["script"])}
             <datalist id="ac-areas-list">
               ${areas.map((a) => html`<option value=${a.area_id}>${a.name}</option>`)}
             </datalist>
@@ -1073,21 +1080,16 @@ export class ViewCovers extends LitElement {
 
             <div class="row">
               <div class="grow">
-                <label class="field-label"
-                  >${t(this.hass, "config_panel.covers_field_entity")}</label
-                >
-                <input
-                  type="text"
-                  list="ac-covers-list"
-                  .value=${draft.cover_entity_id}
-                  spellcheck="false"
-                  autocomplete="off"
-                  @input=${(e: Event) =>
-                    this._patchDraft({
-                      cover_entity_id: (e.target as HTMLInputElement).value,
-                    })}
-                  @change=${() => this._probe()}
-                />
+                ${renderEntityField(
+                  this.hass,
+                  ["cover"],
+                  t(this.hass, "config_panel.covers_field_entity"),
+                  draft.cover_entity_id,
+                  (v) => {
+                    this._patchDraft({ cover_entity_id: v });
+                    this._probe();
+                  }
+                )}
               </div>
             </div>
             ${caps
@@ -1158,36 +1160,22 @@ export class ViewCovers extends LitElement {
             ${renderHelp(this.hass, "low_mode")}
             <div class="row">
               <div class="grow">
-                <label class="field-label"
-                  >${t(this.hass, "config_panel.covers_field_low_entity")}</label
-                >
-                <input
-                  type="text"
-                  list="ac-covers-list"
-                  .value=${draft.low_mode_entity_id ?? ""}
-                  spellcheck="false"
-                  autocomplete="off"
-                  @input=${(e: Event) =>
-                    this._patchDraft({
-                      low_mode_entity_id: (e.target as HTMLInputElement).value || null,
-                    })}
-                />
+                ${renderEntityField(
+                  this.hass,
+                  ["cover"],
+                  t(this.hass, "config_panel.covers_field_low_entity"),
+                  draft.low_mode_entity_id ?? "",
+                  (v) => this._patchDraft({ low_mode_entity_id: v || null })
+                )}
               </div>
               <div class="grow">
-                <label class="field-label"
-                  >${t(this.hass, "config_panel.covers_field_low_script")}</label
-                >
-                <input
-                  type="text"
-                  list="ac-scripts-list"
-                  .value=${draft.low_mode_script_id ?? ""}
-                  spellcheck="false"
-                  autocomplete="off"
-                  @input=${(e: Event) =>
-                    this._patchDraft({
-                      low_mode_script_id: (e.target as HTMLInputElement).value || null,
-                    })}
-                />
+                ${renderEntityField(
+                  this.hass,
+                  ["script"],
+                  t(this.hass, "config_panel.covers_field_low_script"),
+                  draft.low_mode_script_id ?? "",
+                  (v) => this._patchDraft({ low_mode_script_id: v || null })
+                )}
               </div>
             </div>
             ${draft.low_mode_entity_id || draft.low_mode_script_id
@@ -1219,22 +1207,20 @@ export class ViewCovers extends LitElement {
                   </p>
                   <div class="row">
                     <div class="grow">
-                      <label class="field-label"
-                        >${t(this.hass, "config_panel.covers_field_contact")}</label
-                      >
-                      <input
-                        type="text"
-                        list="ac-contacts-list"
-                        .value=${draft.contact_entity_id ?? ""}
-                        spellcheck="false"
-                        autocomplete="off"
-                        @input=${(e: Event) =>
-                          this._patchDraft({
-                            contact_entity_id:
-                              (e.target as HTMLInputElement).value || null,
-                          })}
-                        @change=${() => this._probe()}
-                      />
+                      ${renderEntityField(
+                        this.hass,
+                        ["binary_sensor", "sensor"],
+                        t(this.hass, "config_panel.covers_field_contact"),
+                        draft.contact_entity_id ?? "",
+                        (v) => {
+                          this._patchDraft({ contact_entity_id: v || null });
+                          this._probe();
+                        },
+                        // Suggestions only: the contact is never addressed by a
+                        // service, only read and run through `contact_state_map`,
+                        // so a handle helper on `input_select` stays valid.
+                        { allowCustom: true }
+                      )}
                     </div>
                   </div>
                   ${draft.contact_entity_id
