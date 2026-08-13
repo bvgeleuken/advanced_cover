@@ -8,6 +8,10 @@ DOMAIN: Final = "advanced_cover"
 
 INTEGRATION_VERSION: Final = __version__
 
+# The low-mode script is always invoked as `script.<object_id>`, so this is the
+# one domain that field can hold — the panel filters its picker on it.
+SCRIPT_DOMAIN: Final = "script"
+
 # Full HA configuration dict from async_setup; needed for
 # async_setup_component(..., config).
 HASS_CONFIG_KEY: Final = "_hass_config"

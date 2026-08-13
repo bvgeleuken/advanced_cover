@@ -309,6 +309,11 @@ export const sharedStyles = css`
   input[type="range"] {
     width: 100%;
   }
+  ha-entity-picker,
+  ha-selector {
+    display: block;
+    width: 100%;
+  }
   .checkbox-row {
     display: flex;
     align-items: center;
@@ -499,8 +504,15 @@ export const sharedStyles = css`
     padding: 5px 8px;
     font-size: 0.85rem;
   }
+  /* The HA pickers are block elements with their own internal padding — let them
+     share the sentence row instead of claiming the full width. */
   .cond-row .cond-entity {
-    min-width: 220px;
+    flex: 1 1 240px;
+    min-width: 200px;
+  }
+  .cond-row .cond-state {
+    flex: 1 1 160px;
+    min-width: 140px;
   }
   .cond-remove {
     margin-left: auto;

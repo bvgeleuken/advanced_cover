@@ -1,4 +1,4 @@
-import type { HassConfig, HassEntities } from "home-assistant-js-websocket";
+import type { HassConfig, HassEntities, HassEntity } from "home-assistant-js-websocket";
 
 /** Minimal hass shape for the custom panel. */
 export interface HomeAssistant {
@@ -20,6 +20,8 @@ export interface HomeAssistant {
     key: string,
     values?: Record<string, string | number | null | undefined>
   ) => string;
+  /** Localized label for a state, e.g. `("on")` → "On" (chips next to a picker). */
+  formatEntityState?: (stateObj: HassEntity, state?: string) => string;
   loadBackendTranslation?(
     category: string,
     integration?: string | string[],

@@ -1,4 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
+import { keyed } from "lit/directives/keyed.js";
+import { formatState, renderEntityField, renderEntityStateField } from "./entity-input";
 import { t } from "./i18n";
 import type { Condition, ConditionType, HomeAssistant } from "./types";
 
@@ -8,8 +10,6 @@ export interface ConditionEditorOptions {
   hass: HomeAssistant;
   conditions: Condition[];
   onChange: (conditions: Condition[]) => void;
-  /** Datalist id (rendered by the host once) with all entity ids. */
-  entityListId: string;
   /** Whether the contact condition type is offered (cover has a contact). */
   contactAvailable: boolean;
   /**
@@ -42,25 +42,6 @@ function emptyCondition(type: ConditionType): Condition {
   }
 }
 
-/** Known states of an entity for the state suggestion list. */
-function knownStates(hass: HomeAssistant, entityId?: string | null): string[] {
-  if (!entityId) return [];
-  const st = hass.states[entityId];
-  if (!st) return [];
-  const states = new Set<string>([st.state]);
-  const domain = entityId.split(".", 1)[0];
-  if (domain === "input_select" || domain === "select") {
-    for (const opt of (st.attributes?.options as string[] | undefined) ?? []) {
-      states.add(opt);
-    }
-  }
-  if (domain === "binary_sensor" || domain === "input_boolean" || domain === "switch") {
-    states.add("on");
-    states.add("off");
-  }
-  return [...states];
-}
-
 function update(
   opts: ConditionEditorOptions,
   index: number,
@@ -74,19 +55,44 @@ function remove(opts: ConditionEditorOptions, index: number): void {
   opts.onChange(opts.conditions.filter((_, i) => i !== index));
 }
 
+/**
+ * The entity a condition watches.
+ *
+ * No domain filter and `allowCustom`: the engine only ever reads
+ * `hass.states.get(cond.entity_id)`, so every domain is fair game — and an
+ * entity_id whose integration happens to be unloaded right now must survive
+ * editing the rest of the row.
+ */
+function renderConditionEntityField(
+  opts: ConditionEditorOptions,
+  index: number,
+  cond: Condition,
+  patch: (entityId: string) => Partial<Condition>
+): TemplateResult {
+  return renderEntityField(
+    opts.hass,
+    null,
+    t(opts.hass, "config_panel.cond_entity_label"),
+    cond.entity_id ?? "",
+    (v) => {
+      // The picker re-emits on every render pass; only a real change may run
+      // `patch`, which is what drops the states belonging to the old entity.
+      if (v === (cond.entity_id ?? "")) return;
+      update(opts, index, patch(v));
+    },
+    { allowCustom: true, className: "cond-entity" }
+  );
+}
+
 function renderStateChips(
   opts: ConditionEditorOptions,
   index: number,
   cond: Condition
 ): TemplateResult {
   const states = cond.states ?? [];
-  const listId = `${opts.entityListId}-states-${index}`;
-  const suggestions = knownStates(opts.hass, cond.entity_id);
-  const addState = (input: HTMLInputElement): void => {
-    const value = input.value.trim();
+  const addState = (value: string): void => {
     if (!value || states.includes(value)) return;
     update(opts, index, { states: [...states, value] });
-    input.value = "";
   };
   return html`
     <span class="chips">
@@ -99,27 +105,31 @@ function renderStateChips(
             @click=${() =>
               update(opts, index, { states: states.filter((x) => x !== s) })}
           >
-            ${s} <ha-icon icon="mdi:close"></ha-icon>
+            ${formatState(opts.hass, cond.entity_id, s)}
+            <ha-icon icon="mdi:close"></ha-icon>
           </button>
         `
       )}
     </span>
-    <input
-      type="text"
-      style="min-width:110px"
-      list=${listId}
-      placeholder=${t(opts.hass, "config_panel.cond_state_placeholder")}
-      @keydown=${(e: KeyboardEvent) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          addState(e.target as HTMLInputElement);
-        }
-      }}
-      @change=${(e: Event) => addState(e.target as HTMLInputElement)}
-    />
-    <datalist id=${listId}>
-      ${suggestions.map((s) => html`<option value=${s}></option>`)}
-    </datalist>
+    ${
+      // The picker keeps the state it just handed over, so re-key it on the
+      // current selection: adding (or removing) a chip rebuilds it empty.
+      keyed(
+        states.join("|"),
+        renderEntityStateField(
+          opts.hass,
+          cond.entity_id ?? "",
+          t(opts.hass, "config_panel.cond_state_add"),
+          "",
+          addState,
+          {
+            hideStates: states,
+            helper: t(opts.hass, "config_panel.cond_state_needs_entity"),
+            className: "cond-state",
+          }
+        )
+      )
+    }
   `;
 }
 
@@ -135,18 +145,12 @@ function renderCondition(
     case "entity_state_not":
       body = html`
         <span>${t(hass, "config_panel.cond_only_if")}</span>
-        <input
-          type="text"
-          class="cond-entity"
-          list=${opts.entityListId}
-          .value=${cond.entity_id ?? ""}
-          spellcheck="false"
-          autocomplete="off"
-          @input=${(e: Event) =>
-            update(opts, index, {
-              entity_id: (e.target as HTMLInputElement).value,
-            })}
-        />
+        ${renderConditionEntityField(opts, index, cond, (entity_id) => ({
+          entity_id,
+          // The chips name states of the old entity and would silently never
+          // match the new one — drop them with the entity they belong to.
+          states: [],
+        }))}
         <span>
           ${cond.type === "entity_state"
             ? t(hass, "config_panel.cond_is_one_of")
@@ -227,18 +231,9 @@ function renderCondition(
     case "numeric_state":
       body = html`
         <span>${t(hass, "config_panel.cond_only_if")}</span>
-        <input
-          type="text"
-          class="cond-entity"
-          list=${opts.entityListId}
-          .value=${cond.entity_id ?? ""}
-          spellcheck="false"
-          autocomplete="off"
-          @input=${(e: Event) =>
-            update(opts, index, {
-              entity_id: (e.target as HTMLInputElement).value,
-            })}
-        />
+        ${renderConditionEntityField(opts, index, cond, (entity_id) => ({
+          entity_id,
+        }))}
         <span>${t(hass, "config_panel.cond_numeric_above")}</span>
         <input
           type="number"
