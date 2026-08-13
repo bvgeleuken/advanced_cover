@@ -1206,6 +1206,27 @@ domains, label, value, onValue, { allowCustom = false, className } = {}) {
   `;
 }
 /**
+ * Searchable area picker; emits the selected area_id (`""` when cleared).
+ *
+ * The panel used to render a `<datalist>` over `hass.areas`, which put the raw
+ * `area_id` in the text field — the user typed and read the slug while the
+ * friendly name was only a suggestion. The native selector shows the name and
+ * still hands back the id, so the stored `area_id` is unchanged.
+ */
+function renderAreaField(hass, label, value, onValue, { className } = {}) {
+    return b `
+    <ha-selector
+      class=${className ?? ""}
+      .hass=${hass}
+      .selector=${{ area: { multiple: false } }}
+      .label=${label}
+      .value=${value || undefined}
+      .required=${false}
+      @value-changed=${(e) => onValue(e.detail.value ?? "")}
+    ></ha-selector>
+  `;
+}
+/**
  * State picker for one entity: the value stays the raw state (`"on"`) while the
  * dropdown shows the localized label ("On").
  *
@@ -2266,7 +2287,6 @@ class ViewCovers extends i$2 {
         const draft = this._draft;
         if (!draft)
             return A;
-        const areas = Object.values(this.hass.areas ?? {});
         const caps = this._draftCaps;
         const isAwning = draft.kind === "awning";
         return b `
@@ -2289,10 +2309,6 @@ class ViewCovers extends i$2 {
           </div>
           <div class="dialog-scroll">
             ${this._error ? b `<p class="error">${this._error}</p>` : A}
-
-            <datalist id="ac-areas-list">
-              ${areas.map((a) => b `<option value=${a.area_id}>${a.name}</option>`)}
-            </datalist>
 
             <div class="row">
               <div class="grow">
@@ -2357,17 +2373,7 @@ class ViewCovers extends i$2 {
 
             <div class="row">
               <div class="grow">
-                <label class="field-label"
-                  >${t(this.hass, "config_panel.covers_field_area")}</label
-                >
-                <input
-                  type="text"
-                  list="ac-areas-list"
-                  .value=${draft.area_id ?? ""}
-                  @input=${(e) => this._patchDraft({
-            area_id: e.target.value || null,
-        })}
-                />
+                ${renderAreaField(this.hass, t(this.hass, "config_panel.covers_field_area"), draft.area_id ?? "", (v) => this._patchDraft({ area_id: v || null }))}
               </div>
               <div class="grow">
                 <label class="field-label"
